@@ -9,18 +9,9 @@ class ApiConstants {
       return envUrl;
     }
     if (kIsWeb) {
-      return 'http://localhost:5000';
+      return 'https://chatbot-bc.onrender.com';
     } else {
-      try {
-        if (Platform.isAndroid) {
-          // Use local IP for physical device
-          return 'http://10.122.141.15:5000';
-        } else {
-          return 'http://10.122.141.15:5000';
-        }
-      } catch (e) {
-        return 'http://localhost:5000';
-      }
+      return 'https://chatbot-bc.onrender.com';
     }
   }
 
