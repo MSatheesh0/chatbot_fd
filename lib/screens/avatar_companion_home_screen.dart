@@ -17,6 +17,8 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/tts_service.dart';
 import 'voice_selection_screen.dart';
+import '../services/localization_service.dart';
+import '../services/settings_service.dart';
 
 class AvatarCompanionHomeScreen extends StatefulWidget {
   const AvatarCompanionHomeScreen({super.key});
@@ -31,7 +33,7 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
   final TTSService _ttsService = TTSService();
   
   String? _avatarUrl;
-  String _lastResponse = "Hi! I'm here to help.";
+  String _lastResponse = "";
   String _currentAction = 'idle';
   String _currentEmotion = 'neutral';
   bool _isLoading = true;
@@ -39,6 +41,7 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
   bool _speechEnabled = false;
   bool _isChatOpen = false;
   String _selectedMode = 'Mental Health';
+  bool _isFirstLoad = true;
 
   @override
   void initState() {
@@ -53,7 +56,6 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
     try {
       final token = await _storage.read(key: 'jwt_token');
       
-      // Use the token-based endpoint (no userId in URL)
       final response = await http.get(
         Uri.parse(ApiConstants.activeAvatarUrl),
         headers: {'x-auth-token': token ?? ''},
@@ -63,7 +65,7 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
         final data = jsonDecode(response.body);
         if (mounted) {
           setState(() {
-            _avatarUrl = data['url']; // Ensure we use 'url' field from response
+            _avatarUrl = data['url'];
             _isLoading = false;
           });
         }
@@ -142,7 +144,12 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
         listenFor: const Duration(seconds: 30),
         pauseFor: const Duration(seconds: 5),
         partialResults: false,
-        localeId: 'en_US',
+        localeId: SettingsService().locale.value.languageCode == 'en' ? 'en_US' : 
+                 SettingsService().locale.value.languageCode == 'es' ? 'es_ES' :
+                 SettingsService().locale.value.languageCode == 'fr' ? 'fr_FR' :
+                 SettingsService().locale.value.languageCode == 'hi' ? 'hi_IN' :
+                 SettingsService().locale.value.languageCode == 'de' ? 'de_DE' :
+                 SettingsService().locale.value.languageCode == 'ta' ? 'ta_IN' : 'en_US',
         cancelOnError: true,
         listenMode: ListenMode.confirmation,
       );
@@ -206,205 +213,105 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: Color(0xFFFFF5F7),
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFF5F7), // Soft pink/off-white background
-      body: Stack(
-        children: [
-          // 1. Full-screen Avatar (Main Visual Element)
-          Positioned.fill(
-            child: _avatarUrl != null
-                ? IgnorePointer(
-                    child: AvatarView(
-                      avatarUrl: _avatarUrl!,
-                      action: _currentAction,
-                      emotion: _currentEmotion,
-                    ),
-                  )
-                : Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.person_outline,
-                          size: 120,
-                          color: Colors.grey.withOpacity(0.3),
-                        ),
-                        const SizedBox(height: 20),
-                        Text(
-                          'No Avatar Selected',
-                          style: TextStyle(
-                            color: Colors.grey.withOpacity(0.5),
-                            fontSize: 18,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(builder: (context) => const CreateAvatarScreen()),
-                            ).then((_) => _fetchActiveAvatar());
-                          },
-                          icon: const Icon(Icons.add),
-                          label: const Text('Create Avatar'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF8B5CF6),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-          ),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-          // 2. Floating Header Bar (Glassmorphism)
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.85),
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
-                      blurRadius: 20,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Back Button (Left)
-                    GestureDetector(
-                      onTap: () => Navigator.of(context).pop(),
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
-                              blurRadius: 12,
-                              offset: const Offset(0, 2),
+    return Scaffold(
+      backgroundColor: isDark ? Theme.of(context).scaffoldBackgroundColor : const Color(0xFFFFD6E8),
+      body: ValueListenableBuilder(
+        valueListenable: SettingsService().locale,
+        builder: (context, locale, _) {
+          final l10n = AppLocalizations.of(context);
+          if (_isFirstLoad || _lastResponse.isEmpty) {
+            _lastResponse = l10n.translate('default_avatar_msg');
+            _isFirstLoad = false;
+          }
+          return Stack(
+            children: [
+              // 1. Full-screen Avatar
+              Positioned.fill(
+                child: _avatarUrl != null
+                    ? IgnorePointer(
+                        child: AvatarView(
+                          avatarUrl: _avatarUrl!,
+                          action: _currentAction,
+                          emotion: _currentEmotion,
+                        ),
+                      )
+                    : Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.person_outline,
+                              size: 120,
+                              color: isDark ? Colors.white24 : Colors.grey.withOpacity(0.3),
+                            ),
+                            const SizedBox(height: 20),
+                            Text(
+                              l10n.translate('no_avatar_selected'),
+                              style: TextStyle(
+                                color: isDark ? Colors.white38 : Colors.grey.withOpacity(0.5),
+                                fontSize: 18,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (context) => const CreateAvatarScreen()),
+                                ).then((_) => _fetchActiveAvatar());
+                              },
+                              icon: const Icon(Icons.add),
+                              label: Text(l10n.translate('create_avatar')),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF8B5CF6),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                              ),
                             ),
                           ],
                         ),
-                        child: const Icon(
-                          Icons.arrow_back,
-                          color: Color(0xFF2D3436),
-                          size: 20,
-                        ),
                       ),
-                    ),
+              ),
 
-                    const SizedBox(width: 8),
-
-                    // Chat Mode Selector (Center) - Flexible
-                    Flexible(
-                      child: PopupMenuButton<String>(
-                        onSelected: (String mode) {
-                          setState(() => _selectedMode = mode);
-                        },
-                        itemBuilder: (BuildContext context) {
-                          return ['Chat', 'Funny', 'Mental Health', 'Study'].map((String mode) {
-                            return PopupMenuItem<String>(
-                              value: mode,
-                              child: Text(
-                                mode,
-                                style: const TextStyle(
-                                  color: Color(0xFF2D3436),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            );
-                          }).toList();
-                        },
-                        offset: const Offset(0, 50),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+              // 2. Floating Header Bar
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.black.withOpacity(0.7) : const Color(0xFFEC4899),
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.06),
+                          blurRadius: 20,
+                          offset: const Offset(0, 4),
                         ),
-                        color: Colors.white,
-                        elevation: 8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFFFB88C), Color(0xFFFF9A76)],
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                            ),
-                            borderRadius: BorderRadius.circular(25),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFFFF9A76).withOpacity(0.3),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.chat_bubble_outline,
-                                color: Colors.white,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: Text(
-                                  _selectedMode,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              const Icon(
-                                Icons.keyboard_arrow_down,
-                                color: Colors.white,
-                                size: 16,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                      ],
                     ),
-
-                    const SizedBox(width: 8),
-
-                    // Right Side Buttons Row
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Voice Selection Button
+                        // Back Button
                         GestureDetector(
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(builder: (context) => const VoiceSelectionScreen()),
-                          ),
+                          onTap: () => Navigator.of(context).pop(),
                           child: Container(
-                            margin: const EdgeInsets.only(right: 8),
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: isDark ? Colors.grey[900] : Colors.white.withOpacity(0.2),
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
@@ -414,154 +321,259 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
                                 ),
                               ],
                             ),
-                            child: const Icon(
-                              Icons.record_voice_over,
-                              color: Color(0xFF2D3436),
-                              size: 20,
-                            ),
-                          ),
-                        ),
-                        
-                        // Chat/History Button (Right)
-                        GestureDetector(
-                          onTap: () => setState(() => _isChatOpen = true),
-                          child: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF8B5CF6), Color(0xFF6366F1)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFF8B5CF6).withOpacity(0.3),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.forum_outlined,
+                            child: Icon(
+                              Icons.arrow_back,
                               color: Colors.white,
                               size: 20,
                             ),
                           ),
                         ),
+
+                        const SizedBox(width: 8),
+
+                        // Chat Mode Selector
+                        Flexible(
+                          child: PopupMenuButton<String>(
+                            onSelected: (String mode) {
+                              setState(() => _selectedMode = mode);
+                            },
+                            itemBuilder: (BuildContext context) {
+                              return ['chat', 'funny', 'mental_health', 'study'].map((String modeKey) {
+                                return PopupMenuItem<String>(
+                                  value: modeKey == 'chat' ? 'Chat' : 
+                                         modeKey == 'funny' ? 'Funny' :
+                                         modeKey == 'mental_health' ? 'Mental Health' : 'Study',
+                                  child: Text(
+                                    l10n.translate(modeKey),
+                                    style: TextStyle(
+                                      color: isDark ? Colors.white : const Color(0xFF2D3436),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                );
+                              }).toList();
+                            },
+                            offset: const Offset(0, 50),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            color: isDark ? Colors.grey[900] : Colors.white,
+                            elevation: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFFEC4899), Color(0xFFF472B6)],
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                ),
+                                borderRadius: BorderRadius.circular(25),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFFFF9A76).withOpacity(0.3),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.chat_bubble_outline,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      l10n.translate(_selectedMode.toLowerCase().replaceAll(' ', '_')),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  const Icon(
+                                    Icons.keyboard_arrow_down,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(width: 8),
+
+                        // Right Side Buttons Row
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Voice Selection Button
+                            GestureDetector(
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(builder: (context) => const VoiceSelectionScreen()),
+                              ),
+                              child: Container(
+                                margin: const EdgeInsets.only(right: 8),
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: isDark ? Colors.grey[900] : Colors.white.withOpacity(0.2),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.08),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.record_voice_over,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                            
+                            // Chat/History Button
+                            GestureDetector(
+                              onTap: () => setState(() => _isChatOpen = true),
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFF8B5CF6), Color(0xFF6366F1)],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF8B5CF6).withOpacity(0.3),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.forum_outlined,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // 3. AI Response Bubble (When not in chat mode)
-          if (_lastResponse.isNotEmpty && !_isChatOpen)
-            Positioned(
-              bottom: 160,
-              left: 24,
-              right: 24,
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.95),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: const Color(0xFF8B5CF6).withOpacity(0.15),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Text(
-                  _lastResponse,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Color(0xFF2D3436),
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    height: 1.5,
                   ),
                 ),
               ),
-            ),
 
-          // 4. Primary Microphone Button (Bottom Center - Main CTA)
-          if (!_isChatOpen)
-            Positioned(
-              bottom: 50,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: GestureDetector(
-                  onTap: _handleMicPress,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    width: 85,
-                    height: 85,
+              // 3. AI Response Bubble
+              if (_lastResponse.isNotEmpty && !_isChatOpen)
+                Positioned(
+                  bottom: 160,
+                  left: 24,
+                  right: 24,
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: _isListening
-                            ? [const Color(0xFFEF4444), const Color(0xFFDC2626)]
-                            : [const Color(0xFF8B5CF6), const Color(0xFF6366F1)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                      color: isDark ? Colors.black.withOpacity(0.9) : Colors.white.withOpacity(0.95),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: const Color(0xFF8B5CF6).withOpacity(0.15),
+                        width: 1.5,
                       ),
-                      shape: BoxShape.circle,
                       boxShadow: [
-                        // Inner glow
                         BoxShadow(
-                          color: (_isListening
-                                  ? const Color(0xFFEF4444)
-                                  : const Color(0xFF8B5CF6))
-                              .withOpacity(0.5),
-                          blurRadius: _isListening ? 35 : 25,
-                          spreadRadius: _isListening ? 10 : 5,
-                        ),
-                        // Outer glow
-                        BoxShadow(
-                          color: (_isListening
-                                  ? const Color(0xFFEF4444)
-                                  : const Color(0xFF8B5CF6))
-                              .withOpacity(0.25),
-                          blurRadius: _isListening ? 50 : 40,
-                          spreadRadius: _isListening ? 15 : 10,
-                        ),
-                        // Soft shadow
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.15),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 24,
+                          offset: const Offset(0, 8),
                         ),
                       ],
                     ),
-                    child: Icon(
-                      _isListening ? Icons.stop_rounded : Icons.mic,
-                      color: Colors.white,
-                      size: 38,
+                    child: Text(
+                      _lastResponse,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : const Color(0xFF2D3436),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        height: 1.5,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ),
 
-          // 5. Chat Panel Overlay (Full Screen)
-          if (_isChatOpen)
-            Positioned.fill(
-              child: ChatPanel(
-                onClose: () => setState(() => _isChatOpen = false),
-                onMessageSent: _onMessageReceived,
-                initialMode: _selectedMode,
-              ),
-            ),
-        ],
+              // 4. Primary Microphone Button
+              if (!_isChatOpen)
+                Positioned(
+                  bottom: 50,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: GestureDetector(
+                      onTap: _handleMicPress,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        width: 85,
+                        height: 85,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: _isListening
+                                ? [const Color(0xFFEF4444), const Color(0xFFDC2626)]
+                                : [const Color(0xFF8B5CF6), const Color(0xFF6366F1)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: (_isListening
+                                      ? const Color(0xFFEF4444)
+                                      : const Color(0xFF8B5CF6))
+                                  .withOpacity(0.5),
+                              blurRadius: _isListening ? 35 : 25,
+                              spreadRadius: _isListening ? 10 : 5,
+                            ),
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.15),
+                              blurRadius: 20,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          _isListening ? Icons.stop_rounded : Icons.mic,
+                          color: Colors.white,
+                          size: 38,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+              // 5. Chat Panel Overlay
+              if (_isChatOpen)
+                Positioned.fill(
+                  child: ChatPanel(
+                    onClose: () => setState(() => _isChatOpen = false),
+                    onMessageSent: _onMessageReceived,
+                    initialMode: _selectedMode,
+                    headerColor: const Color(0xFFEC4899),
+                    backgroundColor: const Color(0xFFFFD6E8),
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }

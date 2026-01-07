@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../constants.dart';
 import 'home_screen.dart';
+import '../services/localization_service.dart';
+import '../services/settings_service.dart';
 
 // Conditional Import
 import 'rpm_view_stub.dart'
@@ -32,7 +34,7 @@ class _CreateAvatarScreenState extends State<CreateAvatarScreen> {
           'x-auth-token': token ?? '',
         },
         body: jsonEncode({
-          'name': 'My New Avatar',
+          'name': AppLocalizations.of(context).translate('my_new_avatar'),
           'url': imageUrl,
           'config': {'source': 'readyplayerme'}
         }),
@@ -52,8 +54,9 @@ class _CreateAvatarScreenState extends State<CreateAvatarScreen> {
     } catch (e) {
       setState(() => _isSaving = false);
       if (mounted) {
+        final l10n = AppLocalizations.of(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving avatar: $e')),
+          SnackBar(content: Text('${l10n.translate('error_saving_avatar')}: $e')),
         );
       }
     }
@@ -61,43 +64,56 @@ class _CreateAvatarScreenState extends State<CreateAvatarScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Create Your Avatar',
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        title: Text(
+          l10n.translate('create_your_avatar'),
+          style: TextStyle(
+            color: isDark ? Colors.white : Colors.white, 
+            fontWeight: FontWeight.bold
+          ),
         ),
-        backgroundColor: const Color(0xFFE8D5FF), // Vibrant Purple background
-        foregroundColor: Colors.black, // Dark black text/icons
+        backgroundColor: isDark ? Colors.black : const Color(0xFF8B5CF6),
+        foregroundColor: isDark ? Colors.white : Colors.white,
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.close, color: Color(0xFF8B5CF6)), // Deep Purple Icon
+            icon: Icon(Icons.close, color: isDark ? Colors.white70 : Colors.white),
             onPressed: () {
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (context) => const HomeScreen()),
                 (route) => false,
               );
             },
-            tooltip: 'Close and go to Home',
+            tooltip: l10n.translate('close_and_go_home'),
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          // Use the conditionally imported RpmView
-          RpmView(onAvatarExported: _saveAvatar),
-          
-          if (_isSaving)
-            Container(
-              color: Colors.black54,
-              child: const Center(
-                child: CircularProgressIndicator(
-                  color: Color(0xFF8B5CF6), // Deep Purple
+      body: ValueListenableBuilder(
+        valueListenable: SettingsService().locale,
+        builder: (context, locale, _) {
+          return Stack(
+            children: [
+              // Background color container
+              Container(color: isDark ? Colors.black : const Color(0xFFE8D5FF)),
+              // Use the conditionally imported RpmView
+              RpmView(onAvatarExported: _saveAvatar),
+              
+              if (_isSaving)
+                Container(
+                  color: Colors.black54,
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: isDark ? Colors.white : const Color(0xFF8B5CF6),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }

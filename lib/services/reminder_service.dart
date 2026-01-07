@@ -15,34 +15,71 @@ class ReminderService {
   final StreamController<AlarmSettings> _ringStreamController = StreamController<AlarmSettings>.broadcast();
   final Map<int, Timer> _webTimers = {};
 
-  Future<void> init() async {
+  Future<void> init({bool isBackground = false}) async {
+    await _ttsService.init();
     if (!kIsWeb) {
-      await Alarm.init();
+      // Alarm.init() is called in main and background service, safe to call multiple times
+      await Alarm.init(); 
+      
+      // Check for ringing alarms immediately after init
+      final alarms = await Alarm.getAlarms();
+      for (final alarm in alarms) {
+        if (await Alarm.isRinging(alarm.id)) {
+          debugPrint('🔔 Found ringing alarm on init: ${alarm.id}');
+          _ringStreamController.add(alarm);
+          showOverlay(alarm);
+        }
+      }
+
+      // Only listen to ring stream in main app if NOT in background to avoid double triggering?
+      // Actually, double triggering showOverlay is handled by isActive check.
+      // But let's keep it robust.
       Alarm.ringStream.stream.listen((event) {
-        debugPrint('🔔 Alarm Ringing: ${event.id} at ${event.dateTime}');
+        debugPrint('🔔 Alarm Ringing (Isolate: ${isBackground ? 'Background' : 'Main'}): ${event.id}');
         _ringStreamController.add(event);
-        showOverlay(event); // Show overlay when alarm rings
+        showOverlay(event); 
       });
       
-      // Request overlay permissions
-      final status = await FlutterOverlayWindow.isPermissionGranted();
-      if (!status) {
-        await FlutterOverlayWindow.requestPermission();
-      }
-      
-      // Listen for overlay events (Stop/Snooze from the overlay UI)
+      // Listen for overlay events
       FlutterOverlayWindow.overlayListener.listen((event) {
-        debugPrint('Overlay Event: $event');
+        debugPrint('Overlay Event (Isolate: ${isBackground ? 'Background' : 'Main'}): $event');
         if (event == 'stop') {
           stopAll();
         } else if (event == 'snooze') {
           stopSpeaking();
           FlutterOverlayWindow.closeOverlay();
-          // Logic to reschedule would go here
         }
       });
     }
-    await _ttsService.init();
+  }
+
+  Future<void> requestPermissions() async {
+    if (!kIsWeb) {
+      final status = await FlutterOverlayWindow.isPermissionGranted();
+      if (!status) {
+        await FlutterOverlayWindow.requestPermission();
+      }
+      
+      // Check for Xiaomi specific permissions
+      await _checkXiaomiPermissions();
+    }
+  }
+
+  Future<void> _checkXiaomiPermissions() async {
+    // This is a heuristic check. We can't programmatically check the "Display pop-up" permission 
+    // on Xiaomi easily, but we can detect the manufacturer and guide the user.
+    // For now, we'll rely on the user manually enabling it via the settings we open.
+    // We can't easily import device_info_plus here without adding it to pubspec, 
+    // but we can assume if the user is having issues, they might need to check this.
+    debugPrint("Checking permissions...");
+  }
+  
+  // Helper to open settings for Xiaomi
+  Future<void> openXiaomiPermissions() async {
+    // There is no direct intent for "Other Permissions" on all MIUI versions,
+    // but opening App Settings is the safest bet.
+    await FlutterOverlayWindow.requestPermission(); 
+    // The user has to manually go to "Other Permissions" -> "Display pop-up windows..."
   }
 
   Future<void> scheduleReminder({
@@ -100,24 +137,51 @@ class ReminderService {
   }
 
   Future<void> showOverlay(AlarmSettings settings) async {
-    final title = settings.notificationSettings.title;
+    final title = settings.notificationSettings.title.replaceFirst('Reminder: ', '');
     final body = settings.notificationSettings.body;
 
-    if (await FlutterOverlayWindow.isActive()) return;
+    // Force close any existing overlay first to ensure a fresh state
+    if (await FlutterOverlayWindow.isActive()) {
+      debugPrint('⚠️ Overlay already active, closing it first...');
+      await FlutterOverlayWindow.closeOverlay();
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
 
-    await FlutterOverlayWindow.showOverlay(
-      enableDrag: true,
-      overlayTitle: title,
-      overlayContent: body,
-      flag: OverlayFlag.defaultFlag,
-      alignment: OverlayAlignment.center,
-      visibility: NotificationVisibility.visibilityPublic,
-      positionGravity: PositionGravity.auto,
-      height: 500,
-      width: WindowSize.matchParent,
-    );
+    debugPrint('Attempting to show overlay for: $title');
     
-    // Also start speaking
+    // Check permission again before showing
+    if (!await FlutterOverlayWindow.isPermissionGranted()) {
+      debugPrint('❌ Overlay permission NOT granted. Cannot show overlay.');
+      return;
+    }
+
+    try {
+        await FlutterOverlayWindow.showOverlay(
+          enableDrag: true,
+          overlayTitle: title,
+          overlayContent: body,
+          flag: OverlayFlag.defaultFlag,
+          alignment: OverlayAlignment.center,
+          visibility: NotificationVisibility.visibilityPublic,
+          positionGravity: PositionGravity.auto,
+          height: 500,
+          width: WindowSize.matchParent,
+        );
+        debugPrint('✅ Overlay show command sent');
+    } catch (e) {
+        debugPrint('❌ Error showing overlay: $e');
+    }
+    
+    // Send data to the overlay so it knows what to display
+    await Future.delayed(const Duration(milliseconds: 500));
+    await FlutterOverlayWindow.shareData({
+      'title': title,
+      'body': body,
+      'reminderId': settings.id,
+    });
+    
+    // Also start speaking with a delay to ensure TTS is ready
+    await Future.delayed(const Duration(seconds: 2));
     await speak("$title. $body");
   }
 
@@ -144,11 +208,16 @@ class ReminderService {
 
   Future<void> stopAll() async {
     debugPrint('🛑 Stopping ALL reminders');
-    if (!kIsWeb) {
-      await Alarm.stopAll();
-    }
     await _ttsService.stop();
     await FlutterOverlayWindow.closeOverlay();
+    
+    if (!kIsWeb) {
+      final alarms = await Alarm.getAlarms();
+      for (final alarm in alarms) {
+        await Alarm.stop(alarm.id);
+      }
+      await Alarm.stopAll();
+    }
   }
 
   void _stopWebTimer(int id) {

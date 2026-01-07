@@ -13,6 +13,8 @@ import 'package:permission_handler/permission_handler.dart';
 import '../services/tts_service.dart';
 import '../screens/voice_selection_screen.dart';
 import '../screens/analysis_screen.dart';
+import '../services/localization_service.dart';
+import '../services/settings_service.dart';
 
 // Conditional import for web-specific functionality
 import 'download_helper_stub.dart'
@@ -23,12 +25,16 @@ class ChatPanel extends StatefulWidget {
   final VoidCallback onClose;
   final Function(String, String, String) onMessageSent;
   final String? initialMode;
+  final Color? headerColor;
+  final Color? backgroundColor;
 
   const ChatPanel({
     super.key,
     required this.onClose,
     required this.onMessageSent,
     this.initialMode,
+    this.headerColor,
+    this.backgroundColor,
   });
 
   @override
@@ -60,6 +66,16 @@ class _ChatPanelState extends State<ChatPanel> {
   bool _isVoiceReplyEnabled = false;
 
   static const List<String> _modes = ['Funny', 'Search', 'Mental Health', 'Study'];
+  
+  String _getModeLabel(String mode, AppLocalizations l10n) {
+    switch (mode) {
+      case 'Funny': return l10n.translate('funny');
+      case 'Search': return l10n.translate('search');
+      case 'Mental Health': return l10n.translate('mental_health');
+      case 'Study': return l10n.translate('study');
+      default: return mode;
+    }
+  }
 
   @override
   void initState() {
@@ -272,12 +288,13 @@ class _ChatPanelState extends State<ChatPanel> {
 
   void _downloadChat() {
     if (_messages.isEmpty) return;
+    final l10n = AppLocalizations.of(context);
 
-    String chatContent = "Chat History - Mode: $_selectedMode\n";
+    String chatContent = "${l10n.translate('chat_history')} - ${l10n.translate('select_mode')}: ${l10n.translate(_selectedMode.toLowerCase().replaceAll(' ', '_'))}\n";
     chatContent += "==========================================\n\n";
 
     for (var msg in _messages) {
-      String sender = msg['sender'] == 'user' ? "User" : "AI";
+      String sender = msg['sender'] == 'user' ? l10n.translate('you') : l10n.translate('ai');
       chatContent += "[$sender]: ${msg['message']}\n\n";
     }
 
@@ -328,10 +345,10 @@ class _ChatPanelState extends State<ChatPanel> {
     }
 
     if (_conversations.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
-          'No history for this mode',
-          style: TextStyle(color: Color(0xFF6B7280), fontSize: 16),
+          AppLocalizations.of(context).translate('no_history'),
+          style: const TextStyle(color: Color(0xFF6B7280), fontSize: 16),
         ),
       );
     }
@@ -341,7 +358,9 @@ class _ChatPanelState extends State<ChatPanel> {
       itemCount: _conversations.length,
       itemBuilder: (context, index) {
         final conv = _conversations[index];
-        final isSelected = conv['_id'] == _selectedConversationId;
+        final isSelected = _selectedConversationId == conv['_id'];
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final l10n = AppLocalizations.of(context);
 
         return GestureDetector(
           onTap: () {
@@ -354,15 +373,17 @@ class _ChatPanelState extends State<ChatPanel> {
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: isSelected ? Colors.white : Colors.white.withOpacity(0.6),
+              color: isSelected 
+                  ? (isDark ? Colors.blue[900]!.withOpacity(0.4) : Colors.white) 
+                  : (isDark ? Colors.grey[850]!.withOpacity(0.3) : Colors.white.withOpacity(0.6)),
               borderRadius: BorderRadius.circular(15),
               border: Border.all(
-                color: isSelected ? const Color(0xFF2563EB) : Colors.transparent,
+                color: isSelected ? (isDark ? Colors.blue[400]! : const Color(0xFF2563EB)) : Colors.transparent,
                 width: isSelected ? 2 : 0,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF2563EB).withOpacity(0.05),
+                  color: (isDark ? Colors.black : const Color(0xFF2563EB)).withOpacity(0.05),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -373,10 +394,10 @@ class _ChatPanelState extends State<ChatPanel> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFBFDBFE).withOpacity(0.5),
+                    color: (isDark ? Colors.blue[900]! : const Color(0xFFBFDBFE)).withOpacity(0.5),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.chat_bubble_outline, color: Color(0xFF2563EB), size: 20),
+                  child: Icon(Icons.chat_bubble_outline, color: isDark ? Colors.blue[300] : const Color(0xFF2563EB), size: 20),
                 ),
                 const SizedBox(width: 15),
                 Expanded(
@@ -384,9 +405,9 @@ class _ChatPanelState extends State<ChatPanel> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        conv['title'] ?? 'Untitled Chat',
-                        style: const TextStyle(
-                          color: Color(0xFF1F2937), // Dark text
+                        conv['title'] ?? l10n.translate('untitled_chat'),
+                        style: TextStyle(
+                          color: isDark ? Colors.white : const Color(0xFF1F2937),
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
@@ -396,9 +417,9 @@ class _ChatPanelState extends State<ChatPanel> {
                       const SizedBox(height: 4),
                       Text(
                         conv['updatedAt'] != null 
-                            ? DateTime.parse(conv['updatedAt']).toLocal().toString().split('.')[0]
+                            ? SettingsService().formatDate(DateTime.parse(conv['updatedAt']).toLocal()) + ' ' + SettingsService().formatTime(DateTime.parse(conv['updatedAt']).toLocal())
                             : '',
-                        style: const TextStyle(color: Color(0xFF6B7280), fontSize: 12), // Grey text
+                        style: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF6B7280), fontSize: 12),
                       ),
                     ],
                   ),
@@ -421,7 +442,7 @@ class _ChatPanelState extends State<ChatPanel> {
     if (_messages.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No messages to share')),
+          SnackBar(content: Text(AppLocalizations.of(context).translate('no_msg_share'))),
         );
       }
       return;
@@ -438,9 +459,9 @@ class _ChatPanelState extends State<ChatPanel> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Share Chat As',
-              style: TextStyle(
+            Text(
+              AppLocalizations.of(context).translate('share_chat_as'),
+              style: const TextStyle(
                 color: Color(0xFF1F2937),
                 fontSize: 18, 
                 fontWeight: FontWeight.bold
@@ -456,9 +477,9 @@ class _ChatPanelState extends State<ChatPanel> {
                 ),
                 child: const Icon(Icons.text_snippet_outlined, color: Color(0xFF2563EB)),
               ),
-              title: const Text(
-                'Text Format', 
-                style: TextStyle(color: Color(0xFF1F2937), fontWeight: FontWeight.w500),
+              title: Text(
+                AppLocalizations.of(context).translate('text_format'), 
+                style: const TextStyle(color: Color(0xFF1F2937), fontWeight: FontWeight.w500),
               ),
               onTap: () {
                 Navigator.pop(context);
@@ -474,9 +495,9 @@ class _ChatPanelState extends State<ChatPanel> {
                 ),
                 child: const Icon(Icons.picture_as_pdf_outlined, color: Colors.redAccent),
               ),
-              title: const Text(
-                'PDF Format', 
-                style: TextStyle(color: Color(0xFF1F2937), fontWeight: FontWeight.w500),
+              title: Text(
+                AppLocalizations.of(context).translate('pdf_format'), 
+                style: const TextStyle(color: Color(0xFF1F2937), fontWeight: FontWeight.w500),
               ),
               onTap: () {
                 Navigator.pop(context);
@@ -490,12 +511,13 @@ class _ChatPanelState extends State<ChatPanel> {
   }
 
   void _shareAsText() {
+    final l10n = AppLocalizations.of(context);
     String chatContent = _messages.map((m) {
-      String sender = m['sender'] == 'user' ? 'You' : 'AI';
+      String sender = m['sender'] == 'user' ? l10n.translate('you') : l10n.translate('ai');
       return "$sender: ${m['message']}";
     }).join('\n\n');
     
-    Share.share(chatContent, subject: 'My AI Chat Conversation');
+    Share.share(chatContent, subject: l10n.translate('chat_conversation_subject'));
   }
 
   Future<void> _shareAsPdf() async {
@@ -503,16 +525,17 @@ class _ChatPanelState extends State<ChatPanel> {
 
     pdf.addPage(
       pw.MultiPage(
-        build: (pw.Context context) => [
-          pw.Header(level: 0, child: pw.Text("AI Chat Conversation")),
+        build: (pw.Context pwContext) => [
+          pw.Header(level: 0, child: pw.Text(AppLocalizations.of(context).translate('chat_conversation_header'))),
           ..._messages.map((m) {
+            final l10n = AppLocalizations.of(context);
             return pw.Padding(
               padding: const pw.EdgeInsets.symmetric(vertical: 5),
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text(
-                    m['sender'] == 'user' ? 'You:' : 'AI:',
+                    m['sender'] == 'user' ? '${l10n.translate('you')}:' : '${l10n.translate('ai')}:',
                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                   ),
                   pw.Text(m['message']),
@@ -550,11 +573,13 @@ class _ChatPanelState extends State<ChatPanel> {
     }
   }
 
-
   void _showModeSelection() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final l10n = AppLocalizations.of(context);
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: isDark ? Colors.grey[900] : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -563,10 +588,10 @@ class _ChatPanelState extends State<ChatPanel> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Select Chat Mode',
+            Text(
+              l10n.translate('select_chat_mode'),
               style: TextStyle(
-                color: Color(0xFF1F2937),
+                color: isDark ? Colors.white : const Color(0xFF1F2937),
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
@@ -588,14 +613,14 @@ class _ChatPanelState extends State<ChatPanel> {
                 ),
               ),
               title: Text(
-                mode,
+                _getModeLabel(mode, l10n),
                 style: TextStyle(
-                  color: const Color(0xFF1F2937),
+                  color: isDark ? Colors.white : const Color(0xFF1F2937),
                   fontWeight: _selectedMode == mode ? FontWeight.bold : FontWeight.normal,
                 ),
               ),
               trailing: _selectedMode == mode 
-                  ? const Icon(Icons.check_circle, color: Color(0xFF2563EB))
+                  ? Icon(Icons.check_circle, color: isDark ? Colors.blue[300]! : const Color(0xFF2563EB))
                   : null,
               onTap: () {
                 setState(() {
@@ -616,181 +641,190 @@ class _ChatPanelState extends State<ChatPanel> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: MediaQuery.of(context).size.width,
-      height: MediaQuery.of(context).size.height,
-      decoration: const BoxDecoration(
-        color: Color(0xFFDCEEFF), // Light Sky Blue background
-      ),
-      child: Stack(
-        children: [
-          // Star particles effect (Darker for light bg)
-          Positioned.fill(
-            child: CustomPaint(
-              painter: StarPainter(),
-            ),
+    final l10n = AppLocalizations.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return ValueListenableBuilder(
+      valueListenable: SettingsService().locale,
+      builder: (context, locale, _) {
+        return Container(
+          width: MediaQuery.of(context).size.width,
+          height: MediaQuery.of(context).size.height,
+          decoration: BoxDecoration(
+            color: isDark ? Theme.of(context).scaffoldBackgroundColor : (widget.backgroundColor ?? const Color(0xFFDCEEFF)),
           ),
-          Column(
+          child: Stack(
             children: [
-              // Header
-              SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  child: Row(
-                    children: [
-                      // AI Avatar
-                      Container(
-                        padding: const EdgeInsets.all(1),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: const Color(0xFF2563EB).withOpacity(0.3), width: 1),
-                        ),
-                        child: const CircleAvatar(
-                          radius: 16,
-                          backgroundImage: NetworkImage('https://api.dicebear.com/7.x/avataaars/png?seed=Felix'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // Title & Mode
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
+              // Star particles effect
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: StarPainter(isDark: isDark),
+                ),
+              ),
+              Column(
+                children: [
+                  // Header
+                  Container(
+                    color: isDark ? Colors.black : (widget.headerColor ?? Colors.transparent),
+                    child: SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                        child: Row(
                           children: [
-                            const Text(
-                              'AI Chat',
-                              style: TextStyle(
-                                color: Color(0xFF1F2937),
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
+                            // AI Avatar
+                            Container(
+                              padding: const EdgeInsets.all(1),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: (isDark || widget.headerColor != null ? Colors.white : const Color(0xFF2563EB)).withOpacity(0.3), width: 1),
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text(
-                              _selectedMode,
-                              style: const TextStyle(
-                                color: Color(0xFF6B7280),
-                                fontSize: 11,
+                              child: const CircleAvatar(
+                                radius: 16,
+                                backgroundImage: NetworkImage('https://api.dicebear.com/7.x/avataaars/png?seed=Felix'),
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
-                          ],
-                        ),
-                      ),
-                      // Action Buttons
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Voice Toggle
-                          IconButton(
-                            constraints: const BoxConstraints(),
-                            padding: const EdgeInsets.all(4),
-                            icon: Icon(
-                              _isVoiceReplyEnabled ? Icons.volume_up : Icons.volume_off,
-                              color: _isVoiceReplyEnabled ? const Color(0xFF2563EB) : Colors.grey,
-                              size: 20,
-                            ),
-                            onPressed: _toggleVoiceReply,
-                            tooltip: 'Voice Reply',
-                          ),
-                          // Voice Selection (Only if enabled)
-                          if (_isVoiceReplyEnabled)
-                            IconButton(
-                              constraints: const BoxConstraints(),
-                              padding: const EdgeInsets.all(4),
-                              icon: const Icon(Icons.record_voice_over, color: Color(0xFF2563EB), size: 20),
-                              onPressed: () => Navigator.of(context).push(
-                                MaterialPageRoute(builder: (context) => const VoiceSelectionScreen()),
+                            const SizedBox(width: 8),
+                            // Title & Mode
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    l10n.translate('ai_chat_title'),
+                                    style: TextStyle(
+                                      color: isDark || widget.headerColor != null ? Colors.white : const Color(0xFF1F2937),
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    _getModeLabel(_selectedMode, l10n),
+                                    style: TextStyle(
+                                      color: isDark || widget.headerColor != null ? Colors.white70 : const Color(0xFF6B7280),
+                                      fontSize: 11,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ),
-                              tooltip: 'Select Voice',
                             ),
-                          // New Chat
-                          IconButton(
-                            constraints: const BoxConstraints(),
-                            padding: const EdgeInsets.all(4),
-                            icon: const Icon(Icons.add_circle_outline, color: Color(0xFF2563EB), size: 20),
-                            onPressed: _createNewChat,
-                            tooltip: 'New Chat',
-                          ),
-                          // History
-                          IconButton(
-                            constraints: const BoxConstraints(),
-                            padding: const EdgeInsets.all(4),
-                            icon: Icon(
-                              _isHistoryView ? Icons.chat_outlined : Icons.history,
-                              color: const Color(0xFF2563EB),
-                              size: 20,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _isHistoryView = !_isHistoryView;
-                                if (_isHistoryView) {
-                                  _fetchConversations(autoSelect: false);
-                                }
-                              });
-                            },
-                            tooltip: _isHistoryView ? 'Back to Chat' : 'Chat History',
-                          ),
-                          // More Menu (Download & Share)
-                          PopupMenuButton<String>(
-                            padding: const EdgeInsets.all(4),
-                            constraints: const BoxConstraints(),
-                            icon: const Icon(Icons.more_vert, color: Color(0xFF2563EB), size: 20),
-                            onSelected: (value) {
-                              if (value == 'download') _downloadChat();
-                              if (value == 'share') _shareChat();
-                              if (value == 'analysis') {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (context) => const AnalysisScreen()),
-                                );
-                              }
-                            },
-                            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                              const PopupMenuItem<String>(
-                                value: 'analysis',
-                                child: ListTile(
-                                  leading: Icon(Icons.analytics_outlined, color: Color(0xFF2563EB)),
-                                  title: Text('View Analysis'),
-                                  contentPadding: EdgeInsets.zero,
-                                  dense: true,
+                            // Action Buttons
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Voice Toggle
+                                IconButton(
+                                  constraints: const BoxConstraints(),
+                                  padding: const EdgeInsets.all(4),
+                                  icon: Icon(
+                                    _isVoiceReplyEnabled ? Icons.volume_up : Icons.volume_off,
+                                    color: _isVoiceReplyEnabled ? (isDark || widget.headerColor != null ? Colors.white : const Color(0xFF2563EB)) : (isDark || widget.headerColor != null ? Colors.white60 : Colors.grey),
+                                    size: 20,
+                                  ),
+                                  onPressed: _toggleVoiceReply,
+                                  tooltip: l10n.translate('voice_reply'),
                                 ),
-                              ),
-                              const PopupMenuItem<String>(
-                                value: 'download',
-                                child: ListTile(
-                                  leading: Icon(Icons.download_outlined, color: Color(0xFF2563EB)),
-                                  title: Text('Download Chat'),
-                                  contentPadding: EdgeInsets.zero,
-                                  dense: true,
+                                // Voice Selection (Only if enabled)
+                                if (_isVoiceReplyEnabled)
+                                  IconButton(
+                                    constraints: const BoxConstraints(),
+                                    padding: const EdgeInsets.all(4),
+                                    icon: Icon(Icons.record_voice_over, color: isDark || widget.headerColor != null ? Colors.white : const Color(0xFF2563EB), size: 20),
+                                    onPressed: () => Navigator.of(context).push(
+                                      MaterialPageRoute(builder: (context) => const VoiceSelectionScreen()),
+                                    ),
+                                    tooltip: l10n.translate('select_voice'),
+                                  ),
+                                // New Chat
+                                IconButton(
+                                  constraints: const BoxConstraints(),
+                                  padding: const EdgeInsets.all(4),
+                                  icon: Icon(Icons.add_circle_outline, color: isDark || widget.headerColor != null ? Colors.white : const Color(0xFF2563EB), size: 20),
+                                  onPressed: _createNewChat,
+                                  tooltip: l10n.translate('new_chat'),
                                 ),
-                              ),
-                              const PopupMenuItem<String>(
-                                value: 'share',
-                                child: ListTile(
-                                  leading: Icon(Icons.share_outlined, color: Color(0xFF2563EB)),
-                                  title: Text('Share Chat'),
-                                  contentPadding: EdgeInsets.zero,
-                                  dense: true,
+                                // History
+                                IconButton(
+                                  constraints: const BoxConstraints(),
+                                  padding: const EdgeInsets.all(4),
+                                  icon: Icon(
+                                    _isHistoryView ? Icons.chat_outlined : Icons.history,
+                                    color: isDark || widget.headerColor != null ? Colors.white : const Color(0xFF2563EB),
+                                    size: 20,
+                                  ),
+                                  onPressed: () {
+                                    setState(() {
+                                      _isHistoryView = !_isHistoryView;
+                                      if (_isHistoryView) {
+                                        _fetchConversations(autoSelect: false);
+                                      }
+                                    });
+                                  },
+                                  tooltip: _isHistoryView ? l10n.translate('back_to_chat') : l10n.translate('chat_history'),
                                 ),
+                                // More Menu (Download & Share)
+                                PopupMenuButton<String>(
+                                  padding: const EdgeInsets.all(4),
+                                  constraints: const BoxConstraints(),
+                                  icon: Icon(Icons.more_vert, color: isDark || widget.headerColor != null ? Colors.white : const Color(0xFF2563EB), size: 20),
+                                  onSelected: (value) {
+                                    if (value == 'download') _downloadChat();
+                                    if (value == 'share') _shareChat();
+                                    if (value == 'analysis') {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(builder: (context) => const AnalysisScreen()),
+                                      );
+                                    }
+                                  },
+                                itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                                  PopupMenuItem<String>(
+                                    value: 'analysis',
+                                    child: ListTile(
+                                      leading: Icon(Icons.analytics_outlined, color: isDark ? Colors.blue[300]! : const Color(0xFF2563EB)),
+                                      title: Text(l10n.translate('view_analysis')),
+                                      contentPadding: EdgeInsets.zero,
+                                      dense: true,
+                                    ),
+                                  ),
+                                  PopupMenuItem<String>(
+                                    value: 'download',
+                                    child: ListTile(
+                                      leading: Icon(Icons.download_outlined, color: isDark ? Colors.blue[300]! : const Color(0xFF2563EB)),
+                                      title: Text(l10n.translate('download_chat')),
+                                      contentPadding: EdgeInsets.zero,
+                                      dense: true,
+                                    ),
+                                  ),
+                                  PopupMenuItem<String>(
+                                    value: 'share',
+                                    child: ListTile(
+                                      leading: Icon(Icons.share_outlined, color: isDark ? Colors.blue[300]! : const Color(0xFF2563EB)),
+                                      title: Text(l10n.translate('share_chat')),
+                                      contentPadding: EdgeInsets.zero,
+                                      dense: true,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
+                          const SizedBox(width: 4),
+                          // Close Button
+                          IconButton(
+                            constraints: const BoxConstraints(),
+                            padding: const EdgeInsets.all(4),
+                            icon: Icon(Icons.close, color: isDark ? Colors.blue[300]! : const Color(0xFF2563EB), size: 20),
+                            onPressed: widget.onClose,
+                          ),
                         ],
                       ),
-                      const SizedBox(width: 4),
-                      // Close Button
-                      IconButton(
-                        constraints: const BoxConstraints(),
-                        padding: const EdgeInsets.all(4),
-                        icon: const Icon(Icons.close, color: Color(0xFF2563EB), size: 20),
-                        onPressed: widget.onClose,
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
+                  ),
 
               // Messages Area or History View
               Expanded(
@@ -824,15 +858,15 @@ class _ChatPanelState extends State<ChatPanel> {
                                         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
                                         decoration: BoxDecoration(
                                           color: isAi 
-                                              ? Colors.white // White for AI
-                                              : const Color(0xFF2563EB), // Royal Blue for User
+                                              ? (isDark ? Colors.grey[800]! : Colors.white)
+                                              : (isDark ? Colors.blue[700]! : const Color(0xFF2563EB)),
                                           borderRadius: BorderRadius.circular(22).copyWith(
                                             topLeft: isAi ? const Radius.circular(4) : const Radius.circular(22),
                                             topRight: !isAi ? const Radius.circular(4) : const Radius.circular(22),
                                           ),
                                           boxShadow: [
                                             BoxShadow(
-                                              color: Colors.black.withOpacity(0.05),
+                                              color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
                                               blurRadius: 5,
                                               offset: const Offset(0, 2),
                                             )
@@ -841,7 +875,7 @@ class _ChatPanelState extends State<ChatPanel> {
                                         child: Text(
                                           msg['message'],
                                           style: TextStyle(
-                                            color: isAi ? const Color(0xFF1F2937) : Colors.white,
+                                            color: isAi ? (isDark ? Colors.white : const Color(0xFF1F2937)) : Colors.white,
                                             fontSize: 16,
                                             height: 1.4,
                                           ),
@@ -860,14 +894,14 @@ class _ChatPanelState extends State<ChatPanel> {
               Container(
                 padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.8), // Semi-transparent white
+                  color: isDark ? Colors.grey[900]!.withOpacity(0.9) : Colors.white.withOpacity(0.8),
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(30),
                     topRight: Radius.circular(30),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF2563EB).withOpacity(0.05),
+                      color: (isDark ? Colors.black : const Color(0xFF2563EB)).withOpacity(isDark ? 0.3 : 0.05),
                       blurRadius: 20,
                       offset: const Offset(0, -5),
                     ),
@@ -879,12 +913,12 @@ class _ChatPanelState extends State<ChatPanel> {
                     Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: const Color(0xFFBFDBFE), // Light Blue circle
+                        color: isDark ? Colors.grey[800] : const Color(0xFFBFDBFE),
                       ),
                       child: IconButton(
-                        icon: const Icon(Icons.settings, color: Color(0xFF2563EB)),
+                        icon: Icon(Icons.settings, color: isDark ? Colors.blue[300]! : const Color(0xFF2563EB)),
                         onPressed: _showModeSelection,
-                        tooltip: 'Select Mode',
+                        tooltip: l10n.translate('select_mode'),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -893,17 +927,17 @@ class _ChatPanelState extends State<ChatPanel> {
                       child: Container(
                         height: 50,
                         decoration: BoxDecoration(
-                          color: const Color(0xFFBFDBFE).withOpacity(0.5), // Light Blue Pill
+                          color: isDark ? Colors.grey[800]!.withOpacity(0.5) : const Color(0xFFBFDBFE).withOpacity(0.5),
                           borderRadius: BorderRadius.circular(25),
                         ),
                         child: TextField(
                           controller: _messageController,
-                          style: const TextStyle(color: Color(0xFF1F2937)),
-                          decoration: const InputDecoration(
-                            hintText: 'Type a message...',
-                            hintStyle: TextStyle(color: Color(0xFF6B7280)),
+                          style: TextStyle(color: isDark ? Colors.white : const Color(0xFF1F2937)),
+                          decoration: InputDecoration(
+                            hintText: l10n.translate('type_message'),
+                            hintStyle: TextStyle(color: isDark ? Colors.white54 : const Color(0xFF6B7280)),
                             border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 20),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 20),
                           ),
                           onSubmitted: (_) => _sendMessage(),
                         ),
@@ -914,15 +948,15 @@ class _ChatPanelState extends State<ChatPanel> {
                     Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: _isListening ? Colors.redAccent.withOpacity(0.2) : const Color(0xFFBFDBFE),
+                        color: _isListening ? Colors.redAccent.withOpacity(0.2) : (isDark ? Colors.grey[800] : const Color(0xFFBFDBFE)),
                       ),
                       child: IconButton(
                         icon: Icon(
                           _isListening ? Icons.mic : Icons.mic_none,
-                          color: _isListening ? Colors.redAccent : const Color(0xFF2563EB),
+                          color: _isListening ? Colors.redAccent : (isDark ? Colors.blue[300]! : const Color(0xFF2563EB)),
                         ),
                         onPressed: _isListening ? _stopListening : _startListening,
-                        tooltip: _isListening ? 'Stop Listening' : 'Start Listening',
+                        tooltip: _isListening ? l10n.translate('stop_listening') : l10n.translate('start_listening'),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -930,10 +964,10 @@ class _ChatPanelState extends State<ChatPanel> {
                     Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: const Color(0xFF2563EB), // Royal Blue
+                        color: isDark ? Colors.blue[700] : const Color(0xFF2563EB),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF2563EB).withOpacity(0.3),
+                            color: (isDark ? Colors.blue[700]! : const Color(0xFF2563EB)).withOpacity(0.3),
                             blurRadius: 10,
                             spreadRadius: 1,
                           ),
@@ -952,14 +986,18 @@ class _ChatPanelState extends State<ChatPanel> {
         ],
       ),
     );
-  }
+  },
+);
+}
 }
 
 class StarPainter extends CustomPainter {
+  final bool isDark;
+  StarPainter({required this.isDark});
+
   @override
   void paint(Canvas canvas, Size size) {
-    // Dark grey stars for light background
-    final paint = Paint()..color = const Color(0xFF64748B).withOpacity(0.4);
+    final paint = Paint()..color = isDark ? Colors.white.withOpacity(0.2) : const Color(0xFF64748B).withOpacity(0.4);
     
     final stars = [
       Offset(size.width * 0.1, size.height * 0.2),

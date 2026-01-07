@@ -143,7 +143,7 @@ class _RpmViewState extends State<RpmView> {
         if (_isLoading)
           const Center(
             child: CircularProgressIndicator(
-              color: Color(0xFF6A11CB),
+              color: Color(0xFF8B5CF6),
             ),
           ),
       ],

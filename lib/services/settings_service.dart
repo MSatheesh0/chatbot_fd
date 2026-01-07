@@ -16,10 +16,10 @@ class SettingsService {
   final ValueNotifier<ThemeMode> themeMode = ValueNotifier(ThemeMode.system);
   final ValueNotifier<double> textScale = ValueNotifier(1.0);
   final ValueNotifier<Locale> locale = ValueNotifier(const Locale('en'));
+  final ValueNotifier<String> timeZone = ValueNotifier('Auto (UTC+05:30)');
+  final ValueNotifier<String> dateFormat = ValueNotifier('DD/MM/YYYY');
   
   // Other settings
-  String timeZone = 'Auto (UTC+05:30)';
-  String dateFormat = 'DD/MM/YYYY';
   bool isVoiceEnabled = true;
   String defaultMode = 'Chat';
   Map<String, String> emergencyContact = {'name': '', 'phone': '', 'relationship': ''};
@@ -45,8 +45,8 @@ class SettingsService {
     _updateLocale(lang);
 
     // Others
-    timeZone = prefs.getString('time_zone') ?? 'Auto (UTC+05:30)';
-    dateFormat = prefs.getString('date_format') ?? 'DD/MM/YYYY';
+    timeZone.value = prefs.getString('time_zone') ?? 'Auto (UTC+05:30)';
+    dateFormat.value = prefs.getString('date_format') ?? 'DD/MM/YYYY';
     isVoiceEnabled = prefs.getBool('voice_enabled') ?? true;
     defaultMode = prefs.getString('default_mode') ?? 'Chat';
     
@@ -90,12 +90,12 @@ class SettingsService {
         }
         
         if (data['timeZone'] != null) {
-           timeZone = data['timeZone'];
-           await prefs.setString('time_zone', timeZone);
+           timeZone.value = data['timeZone'];
+           await prefs.setString('time_zone', timeZone.value);
         }
         if (data['dateFormat'] != null) {
-           dateFormat = data['dateFormat'];
-           await prefs.setString('date_format', dateFormat);
+           dateFormat.value = data['dateFormat'];
+           await prefs.setString('date_format', dateFormat.value);
         }
         if (data['isVoiceEnabled'] != null) {
            isVoiceEnabled = data['isVoiceEnabled'];
@@ -135,8 +135,8 @@ class SettingsService {
     if (key == 'is_dark_mode') themeMode.value = (value as bool) ? ThemeMode.dark : ThemeMode.light;
     if (key == 'font_size') _updateTextScale(value as String);
     if (key == 'language') _updateLocale(value as String);
-    if (key == 'time_zone') timeZone = value as String;
-    if (key == 'date_format') dateFormat = value as String;
+    if (key == 'time_zone') timeZone.value = value as String;
+    if (key == 'date_format') dateFormat.value = value as String;
     if (key == 'voice_enabled') isVoiceEnabled = value as bool;
     if (key == 'default_mode') defaultMode = value as String;
     if (key == 'emergency_contact') emergencyContact = Map<String, String>.from(value as Map);
@@ -274,5 +274,22 @@ class SettingsService {
         locale.value = const Locale('en');
         break;
     }
+  }
+
+  // --- Formatting Helpers ---
+
+  String formatDate(DateTime date) {
+    String format = dateFormat.value;
+    if (format == 'DD/MM/YYYY') return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+    if (format == 'MM/DD/YYYY') return '${date.month.toString().padLeft(2, '0')}/${date.day.toString().padLeft(2, '0')}/${date.year}';
+    if (format == 'YYYY-MM-DD') return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    return date.toString().split(' ')[0];
+  }
+
+  String formatTime(DateTime time) {
+    // For now, we'll just use the local time but we could apply offset here if needed
+    final hour = time.hour > 12 ? time.hour - 12 : (time.hour == 0 ? 12 : time.hour);
+    final period = time.hour >= 12 ? 'PM' : 'AM';
+    return '${hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')} $period';
   }
 }

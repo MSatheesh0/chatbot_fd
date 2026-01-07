@@ -5,6 +5,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../constants.dart';
+import '../services/localization_service.dart';
+import '../services/settings_service.dart';
 
 class AnalysisDashboardScreen extends StatefulWidget {
   AnalysisDashboardScreen({super.key});
@@ -82,53 +84,61 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFDFBFF),
-      appBar: AppBar(
-        title: const Text(
-          'Analysis Dashboard',
-          style: TextStyle(color: Color(0xFF2D3436), fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF2D3436)),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: Column(
-        children: [
-          _buildModeSelector(),
-          const SizedBox(height: 10),
-          _buildRangeSelector(),
-          const SizedBox(height: 10),
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF6A11CB)))
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildOverviewCard(),
-                        const SizedBox(height: 20),
-                        _buildTrendCard(),
-                        const SizedBox(height: 20),
-                        _buildDailyTimelineCard(),
-                        const SizedBox(height: 20),
-                        _buildScoreCard(),
-                        const SizedBox(height: 20),
-                      ],
-                    ),
-                  ),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return ValueListenableBuilder(
+      valueListenable: SettingsService().locale,
+      builder: (context, locale, _) {
+        final l10n = AppLocalizations.of(context);
+        return Scaffold(
+          backgroundColor: isDark ? Theme.of(context).scaffoldBackgroundColor : const Color(0xFFF3E5F5),
+          appBar: AppBar(
+            title: Text(
+              l10n.translate('analysis_dashboard'),
+              style: TextStyle(color: isDark ? Colors.white : Colors.white, fontWeight: FontWeight.bold),
+            ),
+            backgroundColor: isDark ? Colors.black : const Color(0xFF9C27B0),
+            elevation: 0,
+            centerTitle: true,
+            leading: IconButton(
+              icon: Icon(Icons.arrow_back_ios_new, color: isDark ? Colors.white : Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
           ),
-        ],
-      ),
+          body: Column(
+            children: [
+              _buildModeSelector(l10n, isDark),
+              const SizedBox(height: 10),
+              _buildRangeSelector(l10n, isDark),
+              const SizedBox(height: 10),
+              Expanded(
+                child: _isLoading
+                    ? Center(child: CircularProgressIndicator(color: isDark ? Colors.blue[300] : const Color(0xFF9C27B0)))
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildOverviewCard(l10n, isDark),
+                            const SizedBox(height: 20),
+                            _buildTrendCard(l10n, isDark),
+                            const SizedBox(height: 20),
+                            _buildDailyTimelineCard(l10n, isDark),
+                            const SizedBox(height: 20),
+                            _buildScoreCard(l10n, isDark),
+                            const SizedBox(height: 20),
+                          ],
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildModeSelector() {
+  Widget _buildModeSelector(AppLocalizations l10n, bool isDark) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -144,7 +154,7 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
               margin: const EdgeInsets.only(right: 10),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF6A11CB) : Colors.white,
+                color: isSelected ? (isDark ? Colors.blue[700] : const Color(0xFF9C27B0)) : (isDark ? Colors.grey[900] : Colors.white),
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   if (!isSelected)
@@ -156,9 +166,9 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
                 ],
               ),
               child: Text(
-                entry.value,
+                l10n.translate(entry.key),
                 style: TextStyle(
-                  color: isSelected ? Colors.white : const Color(0xFF2D3436),
+                  color: isSelected ? Colors.white : (isDark ? Colors.white70 : const Color(0xFF2D3436)),
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -169,7 +179,7 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
     );
   }
 
-  Widget _buildRangeSelector() {
+  Widget _buildRangeSelector(AppLocalizations l10n, bool isDark) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -185,16 +195,16 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFFF0E6FF) : Colors.transparent,
+                color: isSelected ? (isDark ? Colors.blue[900]!.withOpacity(0.3) : const Color(0xFFF0E6FF)) : Colors.transparent,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isSelected ? const Color(0xFF6A11CB) : Colors.grey.shade300,
+                  color: isSelected ? (isDark ? Colors.blue[700]! : const Color(0xFF9C27B0)) : (isDark ? Colors.grey[800]! : Colors.grey.shade300),
                 ),
               ),
               child: Text(
-                entry.value,
+                l10n.translate(entry.key),
                 style: TextStyle(
-                  color: isSelected ? const Color(0xFF6A11CB) : Colors.grey,
+                  color: isSelected ? (isDark ? Colors.blue[300] : const Color(0xFF9C27B0)) : Colors.grey,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                   fontSize: 12,
                 ),
@@ -206,7 +216,7 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
     );
   }
 
-  Widget _buildOverviewCard() {
+  Widget _buildOverviewCard(AppLocalizations l10n, bool isDark) {
     final positive = _data['overview']['positive'] ?? 0;
     final negative = _data['overview']['negative'] ?? 0;
     final total = positive + negative;
@@ -214,7 +224,7 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
 
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: _cardDecoration(),
+      decoration: _cardDecoration(isDark),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -222,8 +232,8 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                '${_modes[_selectedMode]} Insights',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2D3436)),
+                '${l10n.translate(_selectedMode)} ${l10n.translate('insights')}',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF2D3436)),
               ),
               Icon(
                 isMostlyPositive ? Icons.sentiment_satisfied_alt : Icons.sentiment_dissatisfied,
@@ -234,9 +244,9 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
           const SizedBox(height: 20),
           Row(
             children: [
-              _legendItem(const Color(0xFFA3D9A5), 'Positive'),
+              _legendItem(const Color(0xFFA3D9A5), l10n.translate('positive')),
               const SizedBox(width: 15),
-              _legendItem(const Color(0xFFFFB74D), 'Negative'),
+              _legendItem(const Color(0xFFFFB74D), l10n.translate('negative')),
             ],
           ),
           const SizedBox(height: 20),
@@ -253,10 +263,10 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
                     sideTitles: SideTitles(
                       showTitles: true,
                       getTitlesWidget: (value, meta) {
-                        const style = TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 12);
+                        final style = TextStyle(color: isDark ? Colors.white54 : Colors.grey, fontWeight: FontWeight.bold, fontSize: 12);
                         switch (value.toInt()) {
-                          case 0: return const Text('Pos', style: style);
-                          case 1: return const Text('Neg', style: style);
+                          case 0: return Text(l10n.translate('positive').substring(0, 3), style: style);
+                          case 1: return Text(l10n.translate('negative').substring(0, 3), style: style);
                           default: return const Text('');
                         }
                       },
@@ -300,15 +310,15 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
             padding: const EdgeInsets.all(12),
             width: double.infinity,
             decoration: BoxDecoration(
-              color: const Color(0xFFFFF8E1),
+              color: isDark ? Colors.amber[900]!.withOpacity(0.2) : const Color(0xFFFFF8E1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
               isMostlyPositive 
-                  ? 'Great job! Keep up the positive vibes! 😊' 
-                  : 'A bit challenging? That\'s okay, keep going! 💪',
+                  ? l10n.translate('mostly_positive_msg') 
+                  : l10n.translate('mostly_negative_msg'),
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Color(0xFF5D4037), fontWeight: FontWeight.w600),
+              style: TextStyle(color: isDark ? Colors.amber[100] : const Color(0xFF5D4037), fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -316,7 +326,7 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
     );
   }
 
-  Widget _buildTrendCard() {
+  Widget _buildTrendCard(AppLocalizations l10n, bool isDark) {
     final trend = _data['trend'];
     final spots = [
       FlSpot(0, (trend['morning'] ?? 50).toDouble()),
@@ -327,13 +337,13 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
 
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: _cardDecoration(),
+      decoration: _cardDecoration(isDark),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Emotion Trend Over Time',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2D3436)),
+          Text(
+            l10n.translate('emotion_trend'),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF2D3436)),
           ),
           const SizedBox(height: 20),
           AspectRatio(
@@ -347,12 +357,12 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
                       showTitles: true,
                       interval: 1,
                       getTitlesWidget: (value, meta) {
-                        const style = TextStyle(color: Colors.grey, fontSize: 12);
+                        final style = TextStyle(color: isDark ? Colors.white54 : Colors.grey, fontSize: 12);
                         switch (value.toInt()) {
-                          case 0: return const Text('Morning', style: style);
-                          case 1: return const Text('Afternoon', style: style);
-                          case 2: return const Text('Evening', style: style);
-                          case 3: return const Text('Night', style: style);
+                          case 0: return Text(l10n.translate('morning'), style: style);
+                          case 1: return Text(l10n.translate('afternoon'), style: style);
+                          case 2: return Text(l10n.translate('evening'), style: style);
+                          case 3: return Text(l10n.translate('night'), style: style);
                         }
                         return const Text('');
                       },
@@ -371,13 +381,13 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
                   LineChartBarData(
                     spots: spots,
                     isCurved: true,
-                    color: const Color(0xFF6A11CB),
+                    color: isDark ? Colors.blue[300] : const Color(0xFF9C27B0),
                     barWidth: 4,
                     isStrokeCapRound: true,
                     dotData: const FlDotData(show: true),
                     belowBarData: BarAreaData(
                       show: true,
-                      color: const Color(0xFF6A11CB).withOpacity(0.1),
+                      color: (isDark ? Colors.blue[300] : const Color(0xFF9C27B0))!.withOpacity(0.1),
                     ),
                   ),
                 ],
@@ -387,11 +397,11 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
           const SizedBox(height: 15),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: const [
-              Text('😊 Happy', style: TextStyle(fontSize: 12)),
-              Text('😔 Sad', style: TextStyle(fontSize: 12)),
-              Text('😡 Angry', style: TextStyle(fontSize: 12)),
-              Text('😌 Calm', style: TextStyle(fontSize: 12)),
+            children: [
+              Text('😊 ${l10n.translate('happy')}', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87)),
+              Text('😔 ${l10n.translate('sad')}', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87)),
+              Text('😡 ${l10n.translate('angry')}', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87)),
+              Text('😌 ${l10n.translate('calm')}', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black87)),
             ],
           ),
         ],
@@ -399,28 +409,28 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
     );
   }
 
-  Widget _buildDailyTimelineCard() {
+  Widget _buildDailyTimelineCard(AppLocalizations l10n, bool isDark) {
     final List daily = _data['dailyTimeline'] ?? [];
     
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: _cardDecoration(),
+      decoration: _cardDecoration(isDark),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Daily Mood Timeline',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2D3436)),
+          Text(
+            l10n.translate('daily_mood_timeline'),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF2D3436)),
           ),
           const SizedBox(height: 20),
           daily.isEmpty 
-            ? const Center(child: Text('No data for this period', style: TextStyle(color: Colors.grey)))
+            ? Center(child: Text(l10n.translate('no_data'), style: const TextStyle(color: Colors.grey)))
             : SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: daily.map((day) {
                 final date = DateTime.parse(day['date']);
-                final dayName = DateFormat('E').format(date); // Mon, Tue
+                final dayName = DateFormat('E', SettingsService().locale.value.languageCode).format(date); // Mon, Tue
                 final isToday = DateFormat('yyyy-MM-dd').format(DateTime.now()) == day['date'];
 
                 return Container(
@@ -430,9 +440,9 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: isToday ? const Color(0xFFE8D5FF) : Colors.grey.withOpacity(0.1),
+                          color: isToday ? (isDark ? Colors.blue[900]!.withOpacity(0.4) : const Color(0xFFE8D5FF)) : Colors.grey.withOpacity(0.1),
                           shape: BoxShape.circle,
-                          border: isToday ? Border.all(color: const Color(0xFF8B5CF6), width: 2) : null,
+                          border: isToday ? Border.all(color: isDark ? Colors.blue[300]! : const Color(0xFF8B5CF6), width: 2) : null,
                         ),
                         child: Text(
                           day['icon'],
@@ -443,7 +453,7 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
                       Text(
                         dayName,
                         style: TextStyle(
-                          color: isToday ? const Color(0xFF8B5CF6) : Colors.grey,
+                          color: isToday ? (isDark ? Colors.blue[300] : const Color(0xFF8B5CF6)) : Colors.grey,
                           fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
                         ),
                       ),
@@ -458,34 +468,34 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
     );
   }
 
-  Widget _buildScoreCard() {
+  Widget _buildScoreCard(AppLocalizations l10n, bool isDark) {
     final score = _data['mentalHealthScore'] ?? 75;
     Color scoreColor = Colors.green;
-    String status = 'Good';
+    String status = l10n.translate('good');
     
     if (score >= 80) {
       scoreColor = Colors.green;
-      status = 'Excellent';
+      status = l10n.translate('excellent');
     } else if (score >= 60) {
       scoreColor = Colors.lightGreen;
-      status = 'Good';
+      status = l10n.translate('good');
     } else if (score >= 40) {
       scoreColor = Colors.orange;
-      status = 'Moderate';
+      status = l10n.translate('moderate');
     } else {
       scoreColor = Colors.red;
-      status = 'Needs Attention';
+      status = l10n.translate('needs_attention');
     }
 
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: _cardDecoration(),
+      decoration: _cardDecoration(isDark),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '${_modes[_selectedMode]} Score',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF2D3436)),
+            '${l10n.translate(_selectedMode)} ${l10n.translate('score')}',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF2D3436)),
           ),
           const SizedBox(height: 20),
           Row(
@@ -499,7 +509,7 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
                     CircularProgressIndicator(
                       value: score / 100,
                       strokeWidth: 10,
-                      backgroundColor: Colors.grey.withOpacity(0.2),
+                      backgroundColor: isDark ? Colors.grey[800] : Colors.grey.withOpacity(0.2),
                       valueColor: AlwaysStoppedAnimation<Color>(scoreColor),
                     ),
                     Center(
@@ -512,7 +522,7 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
                           ),
                           Text(
                             '/100',
-                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                            style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.grey[600]),
                           ),
                         ],
                       ),
@@ -530,7 +540,7 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
                       style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: scoreColor),
                     ),
                     const SizedBox(height: 10),
-                    _bulletPoint('Based on your recent interactions.', Colors.grey),
+                    _bulletPoint(l10n.translate('score_basis'), isDark ? Colors.white54 : Colors.grey, isDark),
                   ],
                 ),
               ),
@@ -541,7 +551,7 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
     );
   }
 
-  Widget _bulletPoint(String text, Color color) {
+  Widget _bulletPoint(String text, Color color, bool isDark) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -552,7 +562,7 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 8),
-        Expanded(child: Text(text, style: const TextStyle(color: Colors.black54))),
+        Expanded(child: Text(text, style: TextStyle(color: isDark ? Colors.white54 : Colors.black54))),
       ],
     );
   }
@@ -571,13 +581,13 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
     );
   }
 
-  BoxDecoration _cardDecoration() {
+  BoxDecoration _cardDecoration(bool isDark) {
     return BoxDecoration(
-      color: Colors.white,
+      color: isDark ? Colors.grey[900] : Colors.white,
       borderRadius: BorderRadius.circular(24),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.05),
+          color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
           blurRadius: 20,
           offset: const Offset(0, 4),
         ),

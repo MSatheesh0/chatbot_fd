@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:iconsax/iconsax.dart';
 import '../services/tts_service.dart';
+import '../services/localization_service.dart';
+import '../services/settings_service.dart';
 
 class VoiceSelectionScreen extends StatefulWidget {
   const VoiceSelectionScreen({super.key});
@@ -28,6 +30,7 @@ class _VoiceSelectionScreenState extends State<VoiceSelectionScreen> with Single
   String? _errorMessage;
 
   Future<void> _loadData() async {
+    final l10n = AppLocalizations.of(context);
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -39,7 +42,7 @@ class _VoiceSelectionScreenState extends State<VoiceSelectionScreen> with Single
       
       if (voices.isEmpty) {
         setState(() {
-          _errorMessage = "No system voices found. Please check your device settings.";
+          _errorMessage = l10n.translate('no_system_voices');
           _isLoading = false;
         });
       } else {
@@ -58,6 +61,7 @@ class _VoiceSelectionScreenState extends State<VoiceSelectionScreen> with Single
   }
 
   Future<void> _selectVoice(Map<String, String> voice) async {
+    final l10n = AppLocalizations.of(context);
     setState(() => _selectedVoiceId = voice['id']);
     await _ttsService.updateSettings(
       voiceId: voice['id'],
@@ -66,78 +70,87 @@ class _VoiceSelectionScreenState extends State<VoiceSelectionScreen> with Single
     );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Selected voice: ${voice['name']}')),
+        SnackBar(content: Text('${l10n.translate('selected_voice_msg')}${voice['name']}')),
       );
     }
   }
 
   Future<void> _previewVoice(Map<String, String> voice) async {
+    final l10n = AppLocalizations.of(context);
     setState(() => _playingVoiceId = voice['id']);
     try {
-      await _ttsService.speak("Hello, I am ${voice['name']}. How can I help you today?", voice: voice);
+      String text = l10n.translate('hello_voice').replaceAll('{name}', voice['name'] ?? 'AI');
+      await _ttsService.speak(text, voice: voice);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Preview failed: $e')),
+          SnackBar(content: Text('${l10n.translate('preview_failed')}$e')),
         );
       }
     } finally {
-      // We don't automatically reset _playingVoiceId because speak is async but might return before audio finishes?
-      // flutter_tts awaitSpeakCompletion(true) is set in init, so it should wait.
       if (mounted) setState(() => _playingVoiceId = null);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFFDFBFF),
+      backgroundColor: isDark ? Theme.of(context).scaffoldBackgroundColor : const Color(0xFFFDFBFF),
       appBar: AppBar(
-        title: const Text('Select Voice', style: TextStyle(color: Colors.black)),
+        title: Text(l10n.translate('select_voice'), style: TextStyle(color: isDark ? Colors.white : Colors.black)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black),
+          icon: Icon(Icons.arrow_back_ios_new, color: isDark ? Colors.white : Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
         bottom: TabBar(
           controller: _tabController,
-          labelColor: const Color(0xFF6A11CB),
+          labelColor: isDark ? Colors.blue[300] : const Color(0xFF6A11CB),
           unselectedLabelColor: Colors.grey,
-          indicatorColor: const Color(0xFF6A11CB),
-          tabs: const [
-            Tab(text: 'Female', icon: Icon(Icons.female)),
-            Tab(text: 'Male', icon: Icon(Icons.male)),
+          indicatorColor: isDark ? Colors.blue[300] : const Color(0xFF6A11CB),
+          tabs: [
+            Tab(text: l10n.translate('female'), icon: const Icon(Icons.female)),
+            Tab(text: l10n.translate('male'), icon: const Icon(Icons.male)),
           ],
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF6A11CB)))
-          : _errorMessage != null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
-                      const SizedBox(height: 20),
-                      ElevatedButton(
-                        onPressed: _loadData,
-                        child: const Text('Retry'),
+      body: ValueListenableBuilder(
+        valueListenable: SettingsService().locale,
+        builder: (context, locale, _) {
+          return _isLoading
+              ? Center(child: CircularProgressIndicator(color: isDark ? Colors.blue[300] : const Color(0xFF6A11CB)))
+              : _errorMessage != null
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+                          const SizedBox(height: 20),
+                          ElevatedButton(
+                            onPressed: _loadData,
+                            child: Text(l10n.translate('retry')),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                )
-              : TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildVoiceList('female'),
-                    _buildVoiceList('male'),
-                  ],
-                ),
+                    )
+                  : TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildVoiceList('female'),
+                        _buildVoiceList('male'),
+                      ],
+                    );
+        },
+      ),
     );
   }
 
   Widget _buildVoiceList(String gender) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     // Filter voices. If gender is unknown, maybe show in both or a separate list?
     // For now, let's include 'unknown' in 'female' if it looks like it, or just split.
     // My TTSService guesses gender.
@@ -147,7 +160,7 @@ class _VoiceSelectionScreenState extends State<VoiceSelectionScreen> with Single
     // If we have very few voices, maybe show all in both tabs? No.
     
     if (filteredVoices.isEmpty) {
-      return Center(child: Text('No $gender voices available'));
+      return Center(child: Text(AppLocalizations.of(context).translate('no_voices_available')));
     }
 
     return ListView.builder(
@@ -160,34 +173,35 @@ class _VoiceSelectionScreenState extends State<VoiceSelectionScreen> with Single
 
         return Card(
           elevation: isSelected ? 4 : 1,
+          color: isDark ? Colors.grey[900] : Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(15),
-            side: isSelected ? const BorderSide(color: Color(0xFF6A11CB), width: 2) : BorderSide.none,
+            side: isSelected ? BorderSide(color: isDark ? Colors.blue[300]! : const Color(0xFF6A11CB), width: 2) : BorderSide.none,
           ),
           margin: const EdgeInsets.only(bottom: 12),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             leading: CircleAvatar(
-              backgroundColor: isSelected ? const Color(0xFF6A11CB) : Colors.grey.shade200,
+              backgroundColor: isSelected ? (isDark ? Colors.blue[700] : const Color(0xFF6A11CB)) : (isDark ? Colors.grey[800] : Colors.grey.shade200),
               child: Icon(
                 gender == 'female' ? Icons.female : Icons.male,
                 color: isSelected ? Colors.white : Colors.grey,
               ),
             ),
             title: Text(
-              voice['name'] ?? 'Unknown',
+              voice['name'] ?? AppLocalizations.of(context).translate('unknown'),
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: isSelected ? const Color(0xFF6A11CB) : Colors.black87,
+                color: isSelected ? (isDark ? Colors.blue[300] : const Color(0xFF6A11CB)) : (isDark ? Colors.white : Colors.black87),
               ),
             ),
-            subtitle: Text(voice['locale'] ?? '', style: const TextStyle(fontSize: 12)),
+            subtitle: Text(voice['locale'] ?? '', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black54)),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
                   icon: Icon(isPlaying ? Icons.stop_circle : Icons.play_circle_fill),
-                  color: const Color(0xFF2575FC),
+                  color: isDark ? Colors.blue[300] : const Color(0xFF2575FC),
                   onPressed: () => isPlaying ? _ttsService.stop() : _previewVoice(voice),
                 ),
                 if (isSelected)
@@ -196,13 +210,13 @@ class _VoiceSelectionScreenState extends State<VoiceSelectionScreen> with Single
                   ElevatedButton(
                     onPressed: () => _selectVoice(voice),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: const Color(0xFF6A11CB),
+                      backgroundColor: isDark ? Colors.grey[800] : Colors.white,
+                      foregroundColor: isDark ? Colors.blue[300] : const Color(0xFF6A11CB),
                       elevation: 0,
-                      side: const BorderSide(color: Color(0xFF6A11CB)),
+                      side: BorderSide(color: isDark ? Colors.blue[300]! : const Color(0xFF6A11CB)),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                     ),
-                    child: const Text('Select'),
+                    child: Text(AppLocalizations.of(context).translate('select')),
                   ),
               ],
             ),

@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:intl/intl.dart';
 import '../constants.dart';
 import 'avatar_companion_home_screen.dart';
+import '../services/localization_service.dart';
+import '../services/settings_service.dart';
 
 class ChatHistoryScreen extends StatefulWidget {
   const ChatHistoryScreen({super.key});
@@ -58,10 +59,14 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
       );
 
       if (response.statusCode == 200) {
-        _fetchConversations();
+        // Update list locally instead of reloading entire page
+        setState(() {
+          _conversations.removeWhere((conv) => conv['_id'] == id);
+        });
+        
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Conversation deleted')),
+            SnackBar(content: Text(AppLocalizations.of(context).translate('conversation_deleted'))),
           );
         }
       }
@@ -80,21 +85,33 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
 
       if (response.statusCode == 200) {
         final messages = jsonDecode(response.body);
-        String chatContent = "Chat History: $title\n\n";
+        final l10n = AppLocalizations.of(context);
+        String chatContent = "${l10n.translate('chat_history')}: $title\n\n";
         for (var msg in messages) {
-          final sender = msg['sender'] == 'user' ? 'You' : 'AI';
+          final sender = msg['sender'] == 'user' ? l10n.translate('you') : l10n.translate('ai');
           chatContent += "[$sender]: ${msg['message']}\n";
         }
 
-        // In a real app, you'd save this to a file. For now, we'll show it in a dialog.
         if (mounted) {
           showDialog(
             context: context,
             builder: (context) => AlertDialog(
-              title: const Text('Chat Downloaded (Preview)'),
-              content: SingleChildScrollView(child: Text(chatContent)),
+              backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1F2937) : Colors.white,
+              title: Text(
+                l10n.translate('chat_downloaded_preview'),
+                style: TextStyle(color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black),
+              ),
+              content: SingleChildScrollView(
+                child: Text(
+                  chatContent,
+                  style: TextStyle(color: Theme.of(context).brightness == Brightness.dark ? Colors.grey[300] : Colors.black87),
+                ),
+              ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(l10n.translate('close')),
+                ),
               ],
             ),
           );
@@ -107,149 +124,225 @@ class _ChatHistoryScreenState extends State<ChatHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chat History'),
-        backgroundColor: const Color(0xFF6A11CB),
-        foregroundColor: Colors.white,
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
+        title: ValueListenableBuilder(
+          valueListenable: SettingsService().locale,
+          builder: (context, locale, _) {
+            return Text(AppLocalizations.of(context).translate('chat_history'));
+          },
         ),
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: Colors.white))
-            : Column(
-                children: [
-                  // Mode Selector
-                  Container(
-                    height: 60,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: _modes.length,
-                      itemBuilder: (context, index) {
-                        final mode = _modes[index];
-                        final isSelected = _selectedMode == mode;
-                        return GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _selectedMode = mode;
-                              _fetchConversations();
-                            });
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.only(right: 12),
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: isSelected ? Colors.white : Colors.white.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.white24),
-                            ),
-                            child: Center(
-                              child: Text(
-                                mode,
-                                style: TextStyle(
-                                  color: isSelected ? const Color(0xFF6A11CB) : Colors.white,
-                                  fontWeight: FontWeight.bold,
+        backgroundColor: isDark ? Colors.black : const Color(0xFF3B82F6),
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: ValueListenableBuilder(
+        valueListenable: SettingsService().locale,
+        builder: (context, locale, _) {
+          final l10n = AppLocalizations.of(context);
+          return Container(
+            decoration: BoxDecoration(
+              color: isDark ? Colors.black : const Color(0xFFDCEEFF),
+            ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF3B82F6)))
+                : Column(
+                    children: [
+                      // Mode Selector
+                      Container(
+                        height: 60,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: _modes.length,
+                          itemBuilder: (context, index) {
+                            final mode = _modes[index];
+                            final isSelected = _selectedMode == mode;
+                            
+                            // Safe mode translation with fallback
+                            String displayMode = mode;
+                            try {
+                              final modeKey = mode.toLowerCase().replaceAll(' ', '_');
+                              displayMode = l10n.translate(modeKey);
+                            } catch (e) {
+                              debugPrint('Translation error for mode: $mode, using default');
+                              displayMode = mode;
+                            }
+                            
+                            return GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedMode = mode;
+                                  _fetchConversations();
+                                });
+                              },
+                              child: Container(
+                                margin: const EdgeInsets.only(right: 12),
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? Colors.white : Colors.white.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: Colors.white24),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    displayMode,
+                                    style: TextStyle(
+                                      color: isSelected ? (isDark ? Colors.black : const Color(0xFF3B82F6)) : Colors.black54,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  Expanded(
-                    child: _conversations.isEmpty
-                        ? const Center(
-                            child: Text(
-                              'No chat history found.',
-                              style: TextStyle(color: Colors.white70, fontSize: 18),
-                            ),
-                          )
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: _conversations.length,
-                            itemBuilder: (context, index) {
-                      final conv = _conversations[index];
-                      final date = DateTime.parse(conv['updatedAt']);
-                      final formattedDate = DateFormat('MMM d, yyyy • HH:mm').format(date);
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: Colors.white24),
-                        ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                          leading: const CircleAvatar(
-                            backgroundColor: Colors.white24,
-                            child: Icon(Icons.chat_bubble_outline, color: Colors.white),
-                          ),
-                          title: Text(
-                            conv['title'] ?? 'Untitled Chat',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text(
-                            formattedDate,
-                            style: const TextStyle(color: Colors.white70, fontSize: 12),
-                          ),
-                          onTap: () {
-                            // Navigate back to home and open this chat
-                            // For now, we just go back to home
-                            Navigator.of(context).pushAndRemoveUntil(
-                              MaterialPageRoute(builder: (context) => const AvatarCompanionHomeScreen()),
-                              (route) => false,
                             );
                           },
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.download_outlined, color: Colors.blueAccent),
-                                onPressed: () => _downloadChat(conv['_id'], conv['title'] ?? 'Chat'),
-                                tooltip: 'Download',
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                                onPressed: () => _showDeleteConfirmation(conv['_id']),
-                                tooltip: 'Delete',
-                              ),
-                            ],
-                          ),
                         ),
-                      );
-                            },
-                          ),
+                      ),
+                      Expanded(
+                        child: _conversations.isEmpty
+                            ? Center(
+                                child: Text(
+                                  l10n.translate('no_chat_history'),
+                                  style: const TextStyle(color: Colors.grey, fontSize: 18),
+                                ),
+                              )
+                            : ListView.builder(
+                                padding: const EdgeInsets.all(16),
+                                itemCount: _conversations.length,
+                                itemBuilder: (context, index) {
+                                  try {
+                                    // Safely check if index is valid
+                                    if (index < 0 || index >= _conversations.length) {
+                                      return const SizedBox.shrink();
+                                    }
+                                    
+                                    final conv = _conversations[index];
+                                    final date = DateTime.parse(conv['updatedAt']);
+                                    
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                                      ),
+                                      child: ListTile(
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                                        leading: const CircleAvatar(
+                                          backgroundColor: Color(0xFF3B82F6),
+                                          child: Icon(Icons.chat_bubble_outline, color: Colors.white),
+                                        ),
+                                        title: Text(
+                                          conv['title'] ?? l10n.translate('untitled_chat'),
+                                          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                                        ),
+                                        subtitle: ValueListenableBuilder(
+                                          valueListenable: SettingsService().dateFormat,
+                                          builder: (context, dateFormat, _) {
+                                            return ValueListenableBuilder(
+                                              valueListenable: SettingsService().timeZone,
+                                              builder: (context, timeZone, _) {
+                                                return Text(
+                                                  '${SettingsService().formatDate(date)} • ${SettingsService().formatTime(date)}',
+                                                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                                );
+                                              },
+                                            );
+                                          },
+                                        ),
+                                        onTap: () {
+                                          Navigator.of(context).pushAndRemoveUntil(
+                                            MaterialPageRoute(builder: (context) => const AvatarCompanionHomeScreen()),
+                                            (route) => false,
+                                          );
+                                        },
+                                        trailing: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            IconButton(
+                                              icon: const Icon(Icons.download_outlined, color: Colors.blueAccent),
+                                              onPressed: () => _downloadChat(conv['_id'], conv['title'] ?? 'Chat'),
+                                              tooltip: l10n.translate('download_chat'),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                              onPressed: () => _showDeleteConfirmation(conv['_id']),
+                                              tooltip: l10n.translate('delete'),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  } catch (e) {
+                                    debugPrint('Error rendering conversation at index $index: $e');
+                                    // Return an error card instead of crashing
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.withOpacity(0.1),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.error_outline, color: Colors.redAccent),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Text(
+                                              'Error loading conversation',
+                                              style: const TextStyle(color: Colors.white70),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }
+                                },
+                              ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+          );
+        },
       ),
     );
   }
 
   void _showDeleteConfirmation(String id) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final l10n = AppLocalizations.of(context);
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Chat'),
-        content: const Text('Are you sure you want to delete this chat history?'),
+        backgroundColor: isDark ? const Color(0xFF1F2937) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          l10n.translate('delete_chat'),
+          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+        ),
+        content: Text(
+          l10n.translate('delete_chat_confirm'),
+          style: TextStyle(color: isDark ? Colors.grey[300] : Colors.black87),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l10n.translate('cancel')),
+          ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               _deleteConversation(id);
             },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: Text(
+              l10n.translate('delete'),
+              style: const TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),

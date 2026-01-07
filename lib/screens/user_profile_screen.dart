@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:intl/intl.dart';
 import '../constants.dart';
 import 'edit_profile_screen.dart';
+import '../services/localization_service.dart';
+import '../services/settings_service.dart';
 
 class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({super.key});
@@ -47,23 +48,30 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFE0F7E8), // Light Mint Green
+      backgroundColor: isDark ? Theme.of(context).scaffoldBackgroundColor : const Color(0xFFD1FAE5),
       appBar: AppBar(
-        backgroundColor: const Color(0xFFE0F7E8),
-        foregroundColor: const Color(0xFF1F2937), // Dark Grey / Charcoal
+        backgroundColor: isDark ? Colors.black : const Color(0xFF10B981),
+        foregroundColor: isDark ? Colors.white : Colors.white,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'Profile',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF1F2937),
-          ),
+        title: ValueListenableBuilder(
+          valueListenable: SettingsService().locale,
+          builder: (context, locale, _) {
+            return Text(
+              AppLocalizations.of(context).translate('profile'),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : Colors.white,
+              ),
+            );
+          },
         ),
         centerTitle: true,
         actions: [
@@ -82,8 +90,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               },
               child: Container(
                 padding: const EdgeInsets.all(8),
-                decoration: const BoxDecoration(
-                  color: Color(0xFF2E8B57), // Sea Green
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.blue[700] : Colors.white.withOpacity(0.2),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -96,44 +104,48 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF2E8B57)),
-            )
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  // User Info Card
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFFFFF), // White
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(
-                        color: const Color(0xFFA5D6A7), // Light Green Border
-                        width: 1,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF2E8B57).withOpacity(0.05),
-                          blurRadius: 20,
-                          offset: const Offset(0, 10),
+      body: ValueListenableBuilder(
+        valueListenable: SettingsService().locale,
+        builder: (context, locale, _) {
+          final l10n = AppLocalizations.of(context);
+          return _isLoading
+              ? Center(
+                  child: CircularProgressIndicator(color: isDark ? Colors.blue[300] : const Color(0xFF2E8B57)),
+                )
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      // User Info Card
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.grey[900] : const Color(0xFFFFFFFF),
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(
+                            color: isDark ? Colors.grey[800]! : const Color(0xFFA5D6A7),
+                            width: 1,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: (isDark ? Colors.black : const Color(0xFF2E8B57)).withOpacity(isDark ? 0.3 : 0.05),
+                              blurRadius: 20,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        // Profile Photo
+                        child: Column(
+                          children: [
+                            // Profile Photo
                             Container(
                               width: 120,
                               height: 120,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: Colors.white,
+                                color: isDark ? Colors.grey[800] : Colors.white,
                                 border: Border.all(
-                                  color: Colors.white,
+                                  color: isDark ? Colors.grey[700]! : Colors.white,
                                   width: 4,
                                 ),
                                 boxShadow: [
@@ -152,70 +164,77 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                         ),
                                         fit: BoxFit.cover,
                                       )
-                                    : const Icon(
+                                    : Icon(
                                         Icons.person,
                                         size: 60,
-                                        color: Color(0xFF2E8B57), // Sea Green
+                                        color: isDark ? Colors.blue[300] : const Color(0xFF10B981),
                                       ),
                               ),
                             ),
-                        const SizedBox(height: 24),
+                            const SizedBox(height: 24),
+                            // Username
+                            Text(
+                              _userData?['username'] ?? l10n.translate('user_name'),
+                              style: TextStyle(
+                                color: isDark ? Colors.white : const Color(0xFF1F2937),
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 32),
 
-                        // Username
-                        Text(
-                          _userData?['username'] ?? 'User Name',
-                          style: const TextStyle(
-                            color: Color(0xFF1F2937), // Dark Grey
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 32),
-
-                        // Email
-                        _buildInfoRow(
-                          Icons.email_outlined,
-                          'Email',
-                          _userData?['email'] ?? 'email@example.com',
-                        ),
+                            // Email
+                            _buildInfoRow(
+                              Icons.email_outlined,
+                              l10n.translate('email'),
+                              _userData?['email'] ?? 'email@example.com',
+                              isDark,
+                            ),
                         const SizedBox(height: 16),
 
-                        // Phone
-                        if (_userData?['phone'] != null) ...[
-                          _buildInfoRow(
-                            Icons.phone_outlined,
-                            'Phone',
-                            _userData!['phone'],
-                          ),
-                          const SizedBox(height: 16),
-                        ],
+                            // Phone
+                            if (_userData?['phone'] != null) ...[
+                              _buildInfoRow(
+                                Icons.phone_outlined,
+                                l10n.translate('phone'),
+                                _userData!['phone'],
+                                isDark,
+                              ),
+                              const SizedBox(height: 16),
+                            ],
 
-                        // Date of Birth
-                        if (_userData?['dob'] != null)
-                          _buildInfoRow(
-                            Icons.cake_outlined,
-                            'Date of Birth',
-                            DateFormat('MMM dd, yyyy').format(
-                              DateTime.parse(_userData!['dob']),
-                            ),
-                          ),
-                      ],
-                    ),
+                            // Date of Birth
+                            if (_userData?['dob'] != null)
+                              ValueListenableBuilder(
+                                valueListenable: SettingsService().dateFormat,
+                                builder: (context, dateFormat, _) {
+                                  return _buildInfoRow(
+                                    Icons.cake_outlined,
+                                    l10n.translate('dob'),
+                                    SettingsService().formatDate(DateTime.parse(_userData!['dob'])),
+                                    isDark,
+                                  );
+                                },
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                );
+        },
+      ),
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value) {
+  Widget _buildInfoRow(IconData icon, String label, String value, bool isDark) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? Colors.grey[850] : Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: const Color(0xFFA5D6A7), // Light Green Border
+          color: isDark ? Colors.grey[800]! : const Color(0xFFA5D6A7),
           width: 1,
         ),
       ),
@@ -224,12 +243,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFFC0EACA), // Pale Green Pill
+              color: isDark ? Colors.grey[800] : const Color(0xFFD1FAE5),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
               icon,
-              color: const Color(0xFF2E8B57), // Sea Green
+              color: isDark ? Colors.blue[300] : const Color(0xFF10B981),
               size: 24,
             ),
           ),
@@ -240,8 +259,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
-                    color: Color(0xFF64748B), // Slate Grey
+                  style: TextStyle(
+                    color: isDark ? Colors.white54 : const Color(0xFF64748B),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -249,8 +268,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 const SizedBox(height: 4),
                 Text(
                   value,
-                  style: const TextStyle(
-                    color: Color(0xFF1F2937), // Dark Grey
+                  style: TextStyle(
+                    color: isDark ? Colors.white : const Color(0xFF1F2937),
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),

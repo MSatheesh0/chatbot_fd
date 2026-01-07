@@ -17,6 +17,8 @@ class AiChatScreen extends StatelessWidget {
           // But we could add logic here if needed later
         },
         initialMode: 'Mental Health',
+        headerColor: const Color(0xFF3B82F6),
+        backgroundColor: const Color(0xFFDCEEFF),
       ),
     );
   }
