@@ -4,15 +4,11 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiConstants {
   static String get baseUrl {
-    // String? envUrl = dotenv.env['API_BASE_URL'];
-    // if (envUrl != null && envUrl.isNotEmpty) {
-    //   return envUrl;
-    // }
-    if (kIsWeb) {
-      return 'http://172.16.0.200:5000';
-    } else {
-      return 'http://172.16.0.200:5000';
+    String? envUrl = dotenv.env['API_BASE_URL'];
+    if (envUrl != null && envUrl.isNotEmpty) {
+      return envUrl;
     }
+    return 'https://chatbot-bc.onrender.com';
   }
 
   static String get loginUrl => '$baseUrl/auth/login';
