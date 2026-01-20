@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../constants.dart';
 import '../widgets/avatar_view.dart';
-import '../widgets/avatar_view_unity.dart';
+
 import '../widgets/chat_panel.dart';
 import 'add_reminder_screen.dart';
 import 'find_doctors_screen.dart';
@@ -335,7 +335,8 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
               Positioned.fill(
                 child: _avatarUrl != null
                     ? IgnorePointer(
-                        child: AvatarViewUnity(
+                        child: AvatarView(
+                          avatarUrl: _avatarUrl!,
                           action: _currentAction,
                           emotion: _currentEmotion,
                           speed: _currentSpeed,
