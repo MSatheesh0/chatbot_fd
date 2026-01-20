@@ -4,14 +4,14 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiConstants {
   static String get baseUrl {
-    String? envUrl = dotenv.env['API_BASE_URL'];
-    if (envUrl != null && envUrl.isNotEmpty) {
-      return envUrl;
-    }
+    // String? envUrl = dotenv.env['API_BASE_URL'];
+    // if (envUrl != null && envUrl.isNotEmpty) {
+    //   return envUrl;
+    // }
     if (kIsWeb) {
-      return 'https://chatbot-bc.onrender.com';
+      return 'http://172.16.0.200:5000';
     } else {
-      return 'https://chatbot-bc.onrender.com';
+      return 'http://172.16.0.200:5000';
     }
   }
 
@@ -21,7 +21,6 @@ class ApiConstants {
   static String get baseAvatarsUrl => '$baseUrl/avatars';
   static String get setActiveAvatarUrl => '$baseUrl/avatars/set-active';
   static String get activeAvatarUrl => '$baseUrl/avatars/active';
-  static String get chatMessageUrl => '$baseUrl/chat/message';
   static String get conversationsUrl => '$baseUrl/chat/conversations';
   static String get messagesUrl => '$baseUrl/chat/messages';
   static String get profileUrl => '$baseUrl/auth/profile';
@@ -30,6 +29,9 @@ class ApiConstants {
   static String get remindersUrl => '$baseUrl/reminders';
   static String get analysisUrl => '$baseUrl/analysis/emotions';
   static String get voiceSettingsUrl => '$baseUrl/voice/settings';
+  static String get voiceListUrl => '$baseUrl/voice/list';
+  static String get voiceSpeakUrl => '$baseUrl/voice/speak';
+  static String get chatMessageUrl => '$baseUrl/chat/message';
   static String get settingsUrl => '$baseUrl/settings';
   static String get feedbackUrl => '$baseUrl/support/feedback';
 }

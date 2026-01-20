@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'home_screen.dart';
 import 'dart:ui' as ui;
@@ -190,6 +191,12 @@ class _BookingSuccessScreenState extends State<BookingSuccessScreen> {
   }
 
   Future<void> _shareQrCode(BuildContext context) async {
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sharing not supported on Web')),
+      );
+      return;
+    }
     try {
       final image = await QrPainter(
         data: widget.qrData,
@@ -218,6 +225,12 @@ class _BookingSuccessScreenState extends State<BookingSuccessScreen> {
   }
 
   Future<void> _downloadQrCode(BuildContext context) async {
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Downloading not supported on Web')),
+      );
+      return;
+    }
     try {
       final image = await QrPainter(
         data: widget.qrData,

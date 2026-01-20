@@ -459,6 +459,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "12.1.1"
+  flutter_stripe_web:
+    dependency: "direct main"
+    description:
+      name: flutter_stripe_web
+      sha256: "95da58d7780f70e6c4b936c2408b07d5214969f48d76e1319ed33874626e05d4"
+      url: "https://pub.dev"
+    source: hosted
+    version: "7.1.1"
   flutter_test:
     dependency: "direct dev"
     description: flutter
@@ -472,6 +480,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.2.3"
+  flutter_unity_widget:
+    dependency: "direct main"
+    description:
+      name: flutter_unity_widget
+      sha256: "91ed7166754f8c35358dfc92b8812d9ec5fbf1f6d67276a2462fda8ac6eef7f3"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2022.2.1"
   flutter_web_plugins:
     dependency: transitive
     description: flutter
@@ -1106,6 +1122,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.4"
+  stream_transform:
+    dependency: transitive
+    description:
+      name: stream_transform
+      sha256: ad47125e588cfd37a9a7f86c7d6356dde8dfe89d071d293f80ca9e9273a33871
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.1"
   string_scanner:
     dependency: transitive
     description:
@@ -1130,6 +1154,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "12.1.0"
+  stripe_js:
+    dependency: transitive
+    description:
+      name: stripe_js
+      sha256: "76e692d187ce2f63be2ef237fe3749dfdba24af28eee7b84b4eec34e8c864cbe"
+      url: "https://pub.dev"
+    source: hosted
+    version: "7.1.0"
   stripe_platform_interface:
     dependency: transitive
     description:

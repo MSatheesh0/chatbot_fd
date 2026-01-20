@@ -20,11 +20,21 @@ class _VoiceSelectionScreenState extends State<VoiceSelectionScreen> with Single
   String? _selectedVoiceId;
   String? _playingVoiceId; // To track which voice is currently previewing
 
+  bool _isLoaded = false;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _loadData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_isLoaded) {
+      _loadData();
+      _isLoaded = true;
+    }
   }
 
   String? _errorMessage;
@@ -37,14 +47,26 @@ class _VoiceSelectionScreenState extends State<VoiceSelectionScreen> with Single
     });
     
     try {
+      debugPrint("VoiceSelectionScreen: Initializing TTS Service...");
       await _ttsService.init();
       final voices = _ttsService.voices;
+      debugPrint("VoiceSelectionScreen: Loaded ${voices.length} voices.");
       
       if (voices.isEmpty) {
-        setState(() {
-          _errorMessage = l10n.translate('no_system_voices');
-          _isLoading = false;
-        });
+        // Try loading again explicitly if empty
+        await _ttsService.init(); 
+        if (_ttsService.voices.isEmpty) {
+             setState(() {
+              _errorMessage = l10n.translate('no_system_voices');
+              _isLoading = false;
+            });
+        } else {
+             setState(() {
+              _voices = _ttsService.voices;
+              _selectedVoiceId = _ttsService.currentVoice?['id'];
+              _isLoading = false;
+            });
+        }
       } else {
         setState(() {
           _voices = voices;
@@ -53,6 +75,7 @@ class _VoiceSelectionScreenState extends State<VoiceSelectionScreen> with Single
         });
       }
     } catch (e) {
+      debugPrint("VoiceSelectionScreen Error: $e");
       setState(() {
         _errorMessage = "Error: $e";
         _isLoading = false;
@@ -195,7 +218,7 @@ class _VoiceSelectionScreenState extends State<VoiceSelectionScreen> with Single
                 color: isSelected ? (isDark ? Colors.blue[300] : const Color(0xFF6A11CB)) : (isDark ? Colors.white : Colors.black87),
               ),
             ),
-            subtitle: Text(voice['locale'] ?? '', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black54)),
+            subtitle: Text(voice['description'] ?? '', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black54)),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [

@@ -23,7 +23,7 @@ import 'download_helper_stub.dart'
 
 class ChatPanel extends StatefulWidget {
   final VoidCallback onClose;
-  final Function(String, String, String) onMessageSent;
+  final Function(String, String, String, double, String) onMessageSent;
   final String? initialMode;
   final Color? headerColor;
   final Color? backgroundColor;
@@ -235,43 +235,102 @@ class _ChatPanelState extends State<ChatPanel> {
         'type': 'text',
         'createdAt': DateTime.now().toIso8601String(),
       });
+      // Add a placeholder for AI response
+      _messages.add({
+        'sender': 'ai',
+        'message': '', // Will be updated via stream
+        'type': 'text',
+        'createdAt': DateTime.now().toIso8601String(),
+      });
     });
     _scrollToBottom();
 
     try {
       final token = await _storage.read(key: 'jwt_token');
-      final response = await http.post(
-        Uri.parse(ApiConstants.chatMessageUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'x-auth-token': token ?? '',
-        },
-        body: jsonEncode({
-          'message': text,
-          'mode': _selectedMode,
-          'conversationId': _selectedConversationId,
-        }),
-      );
+      final request = http.Request('POST', Uri.parse(ApiConstants.chatMessageUrl));
+      request.headers.addAll({
+        'Content-Type': 'application/json',
+        'x-auth-token': token ?? '',
+      });
+      request.body = jsonEncode({
+        'message': text,
+        'mode': _selectedMode,
+        'conversationId': _selectedConversationId,
+      });
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+      final client = http.Client();
+      final streamedResponse = await client.send(request);
+
+      String fullResponse = "";
+      String currentEmotion = "neutral";
+      String currentAction = "idle";
+      double currentSpeed = 1.0;
+      String currentEyeState = "normal";
+
+      streamedResponse.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen((line) {
+          line = line.trim();
+          if (line.startsWith('data:')) {
+            // Robustly strip "data:" prefix
+            String payload = line.replaceFirst(RegExp(r'^data:\s*'), '');
+            
+            // If it's just [DONE], ignore
+            if (payload.trim() == '[DONE]') return;
+            
+            // Find the first '{' to ensure we have JSON
+            final jsonStart = payload.indexOf('{');
+            if (jsonStart == -1) return;
+            
+            final data = payload.substring(jsonStart).trim();
+            debugPrint("Parsing SSE data: $data");
+            
+            try {
+              if (data.isEmpty) return;
+              final json = jsonDecode(data);
+              
+              if (json['type'] == 'metadata') {
+                final metadata = json['payload'];
+                final avatar = metadata['avatar'];
+                
+                currentEmotion = avatar['facialExpression'] ?? avatar['emotion'] ?? 'neutral';
+                currentAction = avatar['animation'] ?? avatar['gesture'] ?? avatar['action'] ?? 'idle';
+                currentSpeed = (avatar['speed'] as num?)?.toDouble() ?? 1.0;
+                currentEyeState = avatar['eye_state'] ?? 'normal';
+
+                // Trigger avatar update immediately
+                widget.onMessageSent("", currentAction, currentEmotion, currentSpeed, currentEyeState);
+              } else if (json['type'] == 'text' || json.containsKey('content')) {
+                final content = json['content'] as String;
+                fullResponse += content;
+                setState(() {
+                  _messages.last['message'] = fullResponse;
+                });
+              }
+              _scrollToBottom();
+            } catch (e) {
+              debugPrint("JSON Parse Error: $e. Data was: $data");
+            }
+          }
+      }, onDone: () {
         setState(() {
-          _messages.add({
-            'sender': 'ai',
-            'message': data['reply'],
-            'type': 'text',
-            'createdAt': DateTime.now().toIso8601String(),
-          });
           _isSending = false;
         });
-        _scrollToBottom();
         
-        widget.onMessageSent(data['reply'], data['action'], data['emotion']);
-
+        // Final update to ensure everything is synced
+        widget.onMessageSent(fullResponse, currentAction, currentEmotion, currentSpeed, currentEyeState);
+        
         if (_isVoiceReplyEnabled) {
-          await _ttsService.speak(data['reply']);
+          _ttsService.speak(fullResponse);
         }
-      }
+        client.close();
+      }, onError: (e) {
+        debugPrint('Stream error: $e');
+        setState(() => _isSending = false);
+        client.close();
+      });
+
     } catch (e) {
       debugPrint('Error sending message: $e');
       setState(() => _isSending = false);

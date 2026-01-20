@@ -4,8 +4,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:http/http.dart' as http;
-import '../constants.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class TTSService {
@@ -29,12 +27,13 @@ class TTSService {
   bool get isSpeaking => _isSpeaking;
 
   Future<void> init() async {
-    await _initTts();
+    await _initSystemTts();
+    await _loadVoices();
     await _loadSettings();
   }
 
-  Future<void> _initTts() async {
-    if (Platform.isIOS) {
+  Future<void> _initSystemTts() async {
+    if (!kIsWeb && Platform.isIOS) {
       await _flutterTts.setSharedInstance(true);
       await _flutterTts.setIosAudioCategory(IosTextToSpeechAudioCategory.playback,
           [
@@ -46,11 +45,8 @@ class TTSService {
           IosTextToSpeechAudioMode.voicePrompt
       );
     }
-
-    await _flutterTts.setSpeechRate(0.4);
+    await _flutterTts.setSpeechRate(0.5);
     await _flutterTts.setPitch(1.0);
-
-    await _flutterTts.awaitSpeakCompletion(true);
     
     _flutterTts.setStartHandler(() {
       _isSpeaking = true;
@@ -71,8 +67,6 @@ class TTSService {
       _isSpeaking = false;
       debugPrint("TTS Error: $msg");
     });
-
-    await _loadVoices();
   }
 
   Future<void> _loadVoices() async {
@@ -85,38 +79,84 @@ class TTSService {
           String name = voice['name'].toString();
           String locale = voice['locale'].toString();
           
-          // Basic filtering for English voices (can be expanded)
-          if (locale.startsWith('en')) {
+          // Filter for English voices
+          if (locale.toLowerCase().contains('en')) {
              _voices.add({
               'name': name,
               'locale': locale,
               'id': name, // Use name as ID for system TTS
-              'gender': _guessGender(name),
+              'gender': _guessGender(name, locale),
+              'description': '$name ($locale)',
             });
           }
         }
       }
+      debugPrint("TTS: Loaded ${_voices.length} system voices.");
     } catch (e) {
-      debugPrint("Error loading voices: $e");
+      debugPrint("Error loading system voices: $e");
     }
   }
 
-  String _guessGender(String name) {
-    String lowerName = name.toLowerCase();
-    if (lowerName.contains('female') || lowerName.contains('girl') || lowerName.contains('samantha') || lowerName.contains('karen') || lowerName.contains('tessa')) {
+  String _guessGender(String name, String locale) {
+    String lower = name.toLowerCase();
+    
+    // Known Female Keywords
+    if (lower.contains('female') || 
+        lower.contains('woman') || 
+        lower.contains('girl') ||
+        lower.contains('samantha') || 
+        lower.contains('karen') || 
+        lower.contains('tessa') || 
+        lower.contains('victoria') ||
+        lower.contains('zira') ||
+        lower.contains('ava') ||
+        lower.contains('susan') ||
+        lower.contains('fiona') ||
+        lower.contains('veena') ||
+        lower.contains('heera') ||
+        lower.contains('rachel') ||
+        lower.contains('juhi') ||
+        lower.contains('lekh') ||
+        lower.contains('google tts voice 1') || // Google often alternates, 1 is usually female
+        lower.contains('google tts voice 3') ||
+        lower.contains('google tts voice 5') ||
+        lower.contains('en-us-x-sfg') || // Sfg = female
+        lower.contains('en-us-x-tpd') ||
+        lower.contains('en-gb-x-fis')
+       ) {
       return 'female';
     }
-    if (lowerName.contains('male') || lowerName.contains('boy') || lowerName.contains('daniel') || lowerName.contains('rishi') || lowerName.contains('fred')) {
+
+    // Known Male Keywords
+    if (lower.contains('male') || 
+        lower.contains('man') || 
+        lower.contains('boy') ||
+        lower.contains('daniel') || 
+        lower.contains('rishi') || 
+        lower.contains('fred') || 
+        lower.contains('alex') ||
+        lower.contains('david') ||
+        lower.contains('mark') ||
+        lower.contains('ravi') ||
+        lower.contains('neil') ||
+        lower.contains('google tts voice 2') || // Google often alternates, 2 is usually male
+        lower.contains('google tts voice 4') ||
+        lower.contains('google tts voice 6') ||
+        lower.contains('en-us-x-iol') || // Iol = male
+        lower.contains('en-gb-x-rjs')
+       ) {
       return 'male';
     }
-    return 'unknown'; // Fallback
+    
+    // Fallback: Assign based on hash to distribute them between tabs
+    return name.length % 2 == 0 ? 'female' : 'male'; 
   }
 
   Future<void> _loadSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       
-      // Load local preferences first
+      // Load local preferences
       String? savedVoiceId = prefs.getString('tts_voice_id');
       String? savedVoiceName = prefs.getString('tts_voice_name');
       String? savedVoiceGender = prefs.getString('tts_voice_gender');
@@ -139,47 +179,8 @@ class TTSService {
           );
         }
       }
-
-      // Sync with backend (optional, but good for persistence)
-      // We don't block on this
-      _syncWithBackend();
-
     } catch (e) {
       debugPrint("Error loading TTS settings: $e");
-    }
-  }
-
-  Future<void> _syncWithBackend() async {
-    try {
-      final token = await _storage.read(key: 'jwt_token');
-      if (token == null) return;
-
-      final response = await http.get(
-        Uri.parse(ApiConstants.voiceSettingsUrl),
-        headers: {'x-auth-token': token},
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        // If backend has settings, we could override local, or vice versa. 
-        // For now, let's assume local is truth if set, otherwise backend.
-        if (_currentVoice == null && data['voiceId'] != null) {
-           // Find voice by ID (name)
-           var found = _voices.firstWhere((v) => v['id'] == data['voiceId'], orElse: () => {});
-           if (found.isNotEmpty) {
-             _currentVoice = found;
-             // Save locally
-             final prefs = await SharedPreferences.getInstance();
-             await prefs.setString('tts_voice_id', found['id']!);
-             await prefs.setString('tts_voice_name', found['name']!);
-             await prefs.setString('tts_voice_gender', found['gender']!);
-             await prefs.setBool('tts_enabled_chatbot', data['ttsEnabledForChatbot'] ?? false);
-             _ttsEnabledForChatbot = data['ttsEnabledForChatbot'] ?? false;
-           }
-        }
-      }
-    } catch (e) {
-      debugPrint("Error syncing TTS settings: $e");
     }
   }
 
@@ -193,7 +194,6 @@ class TTSService {
 
     if (voiceId != null) {
       await prefs.setString('tts_voice_id', voiceId);
-      // Update in memory
       if (_currentVoice == null) _currentVoice = {};
       _currentVoice!['id'] = voiceId;
     }
@@ -211,48 +211,18 @@ class TTSService {
       await prefs.setBool('tts_enabled_chatbot', ttsEnabledForChatbot);
       _ttsEnabledForChatbot = ttsEnabledForChatbot;
     }
-
-    // Sync to backend
-    try {
-      final token = await _storage.read(key: 'jwt_token');
-      if (token != null) {
-        await http.put(
-          Uri.parse(ApiConstants.voiceSettingsUrl),
-          headers: {
-            'Content-Type': 'application/json',
-            'x-auth-token': token
-          },
-          body: jsonEncode({
-            'voiceId': _currentVoice?['id'],
-            'voiceName': _currentVoice?['name'],
-            'gender': _currentVoice?['gender'],
-            'ttsEnabledForChatbot': _ttsEnabledForChatbot
-          }),
-        );
-      }
-    } catch (e) {
-      debugPrint("Error updating backend settings: $e");
-    }
   }
 
   Future<void> speak(String text, {Map<String, String>? voice}) async {
+    await stop();
+    
     Map<String, String>? targetVoice = voice ?? _currentVoice;
     
     if (targetVoice != null) {
-      // Set voice
-      // flutter_tts setVoice takes a map {"name": "...", "locale": "..."}
-      // We stored these in _voices
-      var voiceData = _voices.firstWhere(
-          (v) => v['id'] == targetVoice!['id'], 
-          orElse: () => _voices.isNotEmpty ? _voices.first : {}
-      );
-      
-      if (voiceData.isNotEmpty) {
-        await _flutterTts.setVoice({
-          "name": voiceData['name']!,
-          "locale": voiceData['locale']!
-        });
-      }
+      await _flutterTts.setVoice({
+        "name": targetVoice['name']!,
+        "locale": targetVoice['locale'] ?? "en-US"
+      });
     }
 
     await _flutterTts.speak(text);

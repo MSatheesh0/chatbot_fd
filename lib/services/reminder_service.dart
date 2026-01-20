@@ -137,6 +137,10 @@ class ReminderService {
   }
 
   Future<void> showOverlay(AlarmSettings settings) async {
+    if (kIsWeb) {
+      debugPrint('⚠️ Overlay not supported on Web');
+      return;
+    }
     final title = settings.notificationSettings.title.replaceFirst('Reminder: ', '');
     final body = settings.notificationSettings.body;
 
@@ -188,7 +192,7 @@ class ReminderService {
   Future<void> stopReminder(int id) async {
     debugPrint('🛑 Stopping reminder $id');
     await _ttsService.stop();
-    await FlutterOverlayWindow.closeOverlay();
+    if (!kIsWeb) await FlutterOverlayWindow.closeOverlay();
     
     if (kIsWeb) {
       _stopWebTimer(id);

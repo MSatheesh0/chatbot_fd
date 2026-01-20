@@ -12,7 +12,7 @@ class AiChatScreen extends StatelessWidget {
         onClose: () {
           Navigator.of(context).pop();
         },
-        onMessageSent: (reply, action, emotion) {
+        onMessageSent: (reply, action, emotion, speed, eyeState) {
           // No avatar to animate in this standalone chat view
           // But we could add logic here if needed later
         },

@@ -24,7 +24,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _checkLoginStatus() async {
     // Simulate a splash delay
-    await Future.delayed(const Duration(seconds: 3));
+    // await Future.delayed(const Duration(seconds: 1));
 
     final token = await _storage.read(key: 'jwt_token');
 
@@ -55,46 +55,104 @@ class _SplashScreenState extends State<SplashScreen> {
           return Container(
             width: double.infinity,
             decoration: BoxDecoration(
-              color: isDark ? Colors.black : const Color(0xFF6A11CB),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: isDark 
+                  ? [Colors.black, const Color(0xFF2D1B4E)] 
+                  : [const Color(0xFF9C27B0), const Color(0xFFE040FB)],
+              ),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo or Icon
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.chat_bubble_outline,
-                    size: 80,
-                    color: Colors.white,
+                const Spacer(),
+                // Avatars Group
+                SizedBox(
+                  height: 120,
+                  width: 200,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Left Avatar (Man)
+                      Positioned(
+                        left: 0,
+                        top: 10,
+                        child: CircleAvatar(
+                          radius: 35,
+                          backgroundColor: Colors.white,
+                          child: CircleAvatar(
+                            radius: 32,
+                            backgroundColor: Colors.blue[100],
+                            backgroundImage: const NetworkImage('https://api.dicebear.com/7.x/avataaars/png?seed=Felix'), // Placeholder
+                          ),
+                        ),
+                      ),
+                      // Right Avatar (Blonde Woman)
+                      Positioned(
+                        right: 0,
+                        top: 10,
+                        child: CircleAvatar(
+                          radius: 35,
+                          backgroundColor: Colors.white,
+                          child: CircleAvatar(
+                            radius: 32,
+                            backgroundColor: Colors.pink[100],
+                            backgroundImage: const NetworkImage('https://api.dicebear.com/7.x/avataaars/png?seed=Aneka'), // Placeholder
+                          ),
+                        ),
+                      ),
+                      // Center Avatar (Woman with black hair)
+                      Positioned(
+                        top: 0,
+                        child: CircleAvatar(
+                          radius: 45,
+                          backgroundColor: Colors.white,
+                          child: CircleAvatar(
+                            radius: 42,
+                            backgroundColor: Colors.green[100],
+                            backgroundImage: const NetworkImage('https://api.dicebear.com/7.x/avataaars/png?seed=Bella'), // Placeholder
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 30),
+                
+                // Title
                 const Text(
-                  'ChatBot AI',
+                  'Bitmoji',
                   style: TextStyle(
-                    fontSize: 32,
+                    fontSize: 40,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
-                    letterSpacing: 1.5,
+                    letterSpacing: 1.0,
+                    fontFamily: 'Roboto', // Ensure a clean font
                   ),
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  l10n.translate('intelligent_companion'),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    color: Colors.white70,
+                const SizedBox(height: 12),
+                
+                // Subtitle
+                const Text(
+                  'Your Mental Health\nCompanion',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                    height: 1.2,
                   ),
                 ),
-                const SizedBox(height: 50),
+                
+                const Spacer(),
+                
+                // Loader
                 const CircularProgressIndicator(
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  strokeWidth: 3,
                 ),
+                const SizedBox(height: 50),
               ],
             ),
           );

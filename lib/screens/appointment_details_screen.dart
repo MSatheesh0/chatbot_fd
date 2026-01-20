@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
@@ -190,6 +191,12 @@ class AppointmentDetailsScreen extends StatelessWidget {
 
   Future<void> _shareQrCode(BuildContext context, String? qrData) async {
     if (qrData == null) return;
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sharing not supported on Web')),
+      );
+      return;
+    }
     try {
       final image = await QrPainter(
         data: qrData,
@@ -219,6 +226,12 @@ class AppointmentDetailsScreen extends StatelessWidget {
 
   Future<void> _downloadQrCode(BuildContext context, String? qrData) async {
     if (qrData == null) return;
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Downloading not supported on Web')),
+      );
+      return;
+    }
     try {
       final image = await QrPainter(
         data: qrData,

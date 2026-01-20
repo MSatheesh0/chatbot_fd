@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../constants.dart';
 import '../widgets/avatar_view.dart';
+import '../widgets/avatar_view_unity.dart';
 import '../widgets/chat_panel.dart';
 import 'add_reminder_screen.dart';
 import 'find_doctors_screen.dart';
@@ -36,6 +37,8 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
   String _lastResponse = "";
   String _currentAction = 'idle';
   String _currentEmotion = 'neutral';
+  double _currentSpeed = 1.0;
+  String _currentEyeState = 'normal';
   bool _isLoading = true;
   bool _isListening = false;
   bool _speechEnabled = false;
@@ -67,11 +70,32 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
           setState(() {
             _avatarUrl = data['url'];
             _isLoading = false;
+            // Trigger initial greeting animation
+            _currentAction = 'wave';
+            _currentEmotion = 'happy';
+          });
+          
+          // Revert to idle after greeting
+          Future.delayed(const Duration(seconds: 3), () {
+            if (mounted) {
+              setState(() {
+                _currentAction = 'idle';
+                _currentEmotion = 'neutral';
+              });
+            }
           });
         }
       } else {
         debugPrint('Failed to fetch active avatar: ${response.statusCode}');
-        if (mounted) setState(() => _isLoading = false);
+        if (mounted) {
+          setState(() {
+            // Fallback for debugging animations
+            _avatarUrl = "https://models.readyplayer.me/64b73b537c6e7f7636363636.glb"; 
+            _isLoading = false;
+            _currentAction = 'wave';
+            _currentEmotion = 'happy';
+          });
+        }
       }
     } catch (e) {
       debugPrint('Error fetching avatar: $e');
@@ -159,29 +183,99 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
   Future<void> _sendMessage(String text) async {
     if (text.isEmpty) return;
 
+    setState(() {
+      _lastResponse = ""; // Clear previous response to show we are waiting/receiving
+    });
+
     try {
       final token = await _storage.read(key: 'jwt_token');
-      final response = await http.post(
-        Uri.parse(ApiConstants.chatMessageUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'x-auth-token': token ?? '',
-        },
-        body: jsonEncode({
-          'message': text,
-          'mode': _selectedMode,
-        }),
-      );
+      final request = http.Request('POST', Uri.parse(ApiConstants.chatMessageUrl));
+      request.headers.addAll({
+        'Content-Type': 'application/json',
+        'x-auth-token': token ?? '',
+      });
+      request.body = jsonEncode({
+        'message': text,
+        'mode': _selectedMode,
+      });
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final reply = data['reply'];
-        final action = data['action'];
-        final emotion = data['emotion'];
+      final client = http.Client();
+      final streamedResponse = await client.send(request);
 
-        _onMessageReceived(reply, action, emotion);
-        await _ttsService.speak(reply);
-      }
+      String fullResponse = "";
+      String currentEmotion = "neutral";
+      String currentAction = "idle";
+      double currentSpeed = 1.0;
+      String currentEyeState = "normal";
+
+      streamedResponse.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen((line) {
+        line = line.trim();
+        if (line.startsWith('data:')) {
+          String payload = line.replaceFirst(RegExp(r'^data:\s*'), '');
+          if (payload.trim() == '[DONE]') return;
+
+          final jsonStart = payload.indexOf('{');
+          if (jsonStart == -1) return;
+
+          final data = payload.substring(jsonStart).trim();
+          try {
+            if (data.isEmpty) return;
+            final json = jsonDecode(data);
+
+            if (json['type'] == 'metadata') {
+              final metadata = json['payload'];
+              final avatar = metadata['avatar'];
+              
+              currentEmotion = avatar['facialExpression'] ?? avatar['emotion'] ?? 'neutral';
+              currentAction = avatar['animation'] ?? avatar['gesture'] ?? avatar['action'] ?? 'idle'; // Use gesture as primary action
+              currentSpeed = (avatar['speed'] as num?)?.toDouble() ?? 1.0;
+              currentEyeState = avatar['eye_state'] ?? 'normal';
+
+              if (mounted) {
+                setState(() {
+                  _currentEmotion = currentEmotion;
+                  _currentAction = currentAction;
+                  _currentSpeed = currentSpeed;
+                  _currentEyeState = currentEyeState;
+                });
+              }
+            } else if (json['type'] == 'text') {
+              final content = json['content'] as String;
+              fullResponse += content;
+              if (mounted) {
+                setState(() {
+                  _lastResponse = fullResponse;
+                });
+              }
+            } else if (json.containsKey('content')) {
+              // Backward compatibility
+              final content = json['content'] as String;
+              fullResponse += content;
+              if (mounted) {
+                setState(() {
+                  _lastResponse = fullResponse;
+                });
+              }
+            }
+          } catch (e) {
+            debugPrint("JSON Parse Error: $e");
+          }
+        }
+      }, onDone: () async {
+        if (mounted) {
+          // Final update
+          _onMessageReceived(fullResponse, currentAction, currentEmotion, currentSpeed, currentEyeState);
+          await _ttsService.speak(fullResponse);
+        }
+        client.close();
+      }, onError: (e) {
+        debugPrint('Stream error: $e');
+        client.close();
+      });
+
     } catch (e) {
       debugPrint('Error sending voice message: $e');
       if (mounted) {
@@ -192,11 +286,13 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
     }
   }
 
-  void _onMessageReceived(String reply, String action, String emotion) {
+  void _onMessageReceived(String reply, String action, String emotion, double speed, String eyeState) {
     setState(() {
       _lastResponse = reply;
       _currentAction = action;
       _currentEmotion = emotion;
+      _currentSpeed = speed;
+      _currentEyeState = eyeState;
     });
 
     // Reset to idle after 3 seconds
@@ -205,6 +301,8 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
         setState(() {
           _currentAction = 'idle';
           _currentEmotion = 'neutral';
+          _currentSpeed = 1.0;
+          _currentEyeState = 'normal';
         });
       }
     });
@@ -237,10 +335,11 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
               Positioned.fill(
                 child: _avatarUrl != null
                     ? IgnorePointer(
-                        child: AvatarView(
-                          avatarUrl: _avatarUrl!,
+                        child: AvatarViewUnity(
                           action: _currentAction,
                           emotion: _currentEmotion,
+                          speed: _currentSpeed,
+                          eyeState: _currentEyeState,
                         ),
                       )
                     : Center(
@@ -410,10 +509,31 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
 
                         const SizedBox(width: 8),
 
-                        // Right Side Buttons Row
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
+                            // Debug Button
+                            GestureDetector(
+                              onTap: _showDebugPanel,
+                              child: Container(
+                                margin: const EdgeInsets.only(right: 8),
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: isDark ? Colors.grey[900] : Colors.white.withOpacity(0.2),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.08),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.bug_report,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+
                             // Voice Selection Button
                             GestureDetector(
                               onTap: () => Navigator.of(context).push(
@@ -470,11 +590,9 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
                             ),
                           ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ),
 
               // 3. AI Response Bubble
               if (_lastResponse.isNotEmpty && !_isChatOpen)
@@ -574,6 +692,94 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  void _showDebugPanel() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1F2937) : Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Debug Animations", 
+                style: TextStyle(
+                  fontSize: 18, 
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black87
+                )
+              ),
+              const SizedBox(height: 15),
+              
+              Text("Actions", style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600])),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: ['idle', 'talk', 'wave', 'walk'].map((action) => 
+                  ActionChip(
+                    label: Text(action),
+                    backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
+                    labelStyle: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _onMessageReceived("Debug: $action", action, _currentEmotion, 1.0, _currentEyeState);
+                    },
+                  )
+                ).toList(),
+              ),
+              const SizedBox(height: 15),
+              
+              Text("Emotions", style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600])),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: ['neutral', 'happy', 'sad', 'angry', 'surprised', 'excited'].map((emotion) => 
+                  ActionChip(
+                    label: Text(emotion),
+                    backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
+                    labelStyle: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _onMessageReceived("Debug: $emotion", _currentAction, emotion, 1.0, _currentEyeState);
+                    },
+                  )
+                ).toList(),
+              ),
+              const SizedBox(height: 15),
+              
+              Text("Eye States", style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600])),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: ['normal', 'focused', 'soft', 'blink'].map((state) => 
+                  ActionChip(
+                    label: Text(state),
+                    backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
+                    labelStyle: TextStyle(color: isDark ? Colors.white : Colors.black87),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _onMessageReceived("Debug: $state", _currentAction, _currentEmotion, 1.0, state);
+                    },
+                  )
+                ).toList(),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

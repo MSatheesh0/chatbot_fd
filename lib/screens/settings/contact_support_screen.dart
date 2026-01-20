@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../../services/settings_service.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:io';
@@ -26,15 +27,21 @@ class _ContactSupportScreenState extends State<ContactSupportScreen> {
 
     // Gather metadata
     final deviceInfo = DeviceInfoPlugin();
-    String os = Platform.operatingSystem;
-    String model = 'Unknown';
+    String os = 'Web';
+    String model = 'Browser';
     
-    if (Platform.isAndroid) {
-      final androidInfo = await deviceInfo.androidInfo;
-      model = '${androidInfo.brand} ${androidInfo.model}';
-    } else if (Platform.isIOS) {
-      final iosInfo = await deviceInfo.iosInfo;
-      model = iosInfo.utsname.machine;
+    if (!kIsWeb) {
+      os = Platform.operatingSystem;
+      if (Platform.isAndroid) {
+        final androidInfo = await deviceInfo.androidInfo;
+        model = '${androidInfo.brand} ${androidInfo.model}';
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfo.iosInfo;
+        model = iosInfo.utsname.machine;
+      }
+    } else {
+      final webInfo = await deviceInfo.webBrowserInfo;
+      model = '${webInfo.browserName} ${webInfo.appVersion}';
     }
 
     final success = await SettingsService().submitSupportTicket(
