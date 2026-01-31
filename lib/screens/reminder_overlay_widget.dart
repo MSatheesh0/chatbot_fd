@@ -58,8 +58,8 @@ class _ReminderOverlayWidgetState extends State<ReminderOverlayWidget> {
       color: Colors.transparent,
       child: Center(
         child: Container(
-          width: 320, // Slightly wider
-          height: 480, // Slightly taller
+          width: 340, // Wider
+          height: 550, // Taller
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(24),
@@ -75,23 +75,22 @@ class _ReminderOverlayWidgetState extends State<ReminderOverlayWidget> {
             children: [
               // Avatar Section
               Expanded(
-                flex: 3,
+                flex: 1, // Reduced flex to give more space to text
                 child: Container(
                   width: double.infinity,
                   decoration: const BoxDecoration(
                     color: Color(0xFFFFE4E6),
                     borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                   ),
-                  child: const AvatarView(
-                    avatarUrl: 'https://models.readyplayer.me/64b73e0e3c7943482d8c9735.glb', // Default for overlay
-                    action: 'talking',
-                    emotion: 'happy',
+                  child: Image.asset(
+                    'assets/app_icon.png', // Fallback image
+                    fit: BoxFit.contain,
                   ),
                 ),
               ),
               // Text Section
               Expanded(
-                flex: 2,
+                flex: 1, // Increased flex
                 child: Padding(
                   padding: const EdgeInsets.all(20.0),
                   child: Column(

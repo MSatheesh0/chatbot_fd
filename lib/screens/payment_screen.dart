@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_stripe/flutter_stripe.dart' hide Card;
 import 'package:http/http.dart' as http;
@@ -61,10 +62,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   Future<void> _loadStripeKey() async {
-    final key = dotenv.env['STRIPE_PUBLISHABLE_KEY'];
-    if (key != null) {
-      Stripe.publishableKey = key;
-    }
+    // Hardcoded key for immediate fix
+    const key = 'pk_test_51SmULpGaE4trEWqZk0WkShfFiZsAXz9tVmYkLaV00WMBI18N5d24GsPqk6gIlCjALWRyW';
+    Stripe.publishableKey = key;
   }
 
   Future<void> _processPayment() async {
@@ -74,44 +74,52 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     try {
       // 1. Get Client Secret from Backend
-      final clientSecret = await _createPaymentIntent();
+      final data = await _createPaymentIntentData();
+      final clientSecret = data?['clientSecret'];
+      final paymentIntentId = data?['paymentIntentId'];
 
-      if (clientSecret == null) {
-        throw Exception('Failed to get client secret');
+      if (clientSecret == null || paymentIntentId == null) {
+        throw Exception('Failed to get payment details');
       }
 
-      // 2. Initialize Payment Sheet
-      await Stripe.instance.initPaymentSheet(
-        paymentSheetParameters: SetupPaymentSheetParameters(
-          paymentIntentClientSecret: clientSecret,
-          merchantDisplayName: 'Mental Health App',
-          style: ThemeMode.system,
-          billingDetails: BillingDetails(
-            name: _userProfile?['username'] ?? '',
-            email: _userProfile?['email'] ?? '',
-            phone: _userProfile?['phone'] ?? '',
-            address: const Address(
-              country: 'IN',
-              city: 'India',
-              line1: '',
-              line2: '',
-              postalCode: '',
-              state: '',
+      if (kIsWeb) {
+        // --- WEB SIMULATION FLOW ---
+        await _simulateWebPayment(paymentIntentId);
+      } else {
+        // --- MOBILE STRIPE FLOW ---
+        // 2. Initialize Payment Sheet
+        await Stripe.instance.initPaymentSheet(
+          paymentSheetParameters: SetupPaymentSheetParameters(
+            paymentIntentClientSecret: clientSecret,
+            merchantDisplayName: 'Mental Health App',
+            style: ThemeMode.system,
+            billingDetails: BillingDetails(
+              name: _userProfile?['username'] ?? '',
+              email: _userProfile?['email'] ?? '',
+              phone: _userProfile?['phone'] ?? '',
+              address: const Address(
+                country: 'IN',
+                city: 'India',
+                line1: '',
+                line2: '',
+                postalCode: '',
+                state: '',
+              ),
+            ),
+            appearance: const PaymentSheetAppearance(
+              colors: PaymentSheetAppearanceColors(
+                primary: Color(0xFF06B6D4),
+              ),
             ),
           ),
-          appearance: const PaymentSheetAppearance(
-            colors: PaymentSheetAppearanceColors(
-              primary: Color(0xFF06B6D4),
-            ),
-          ),
-        ),
-      );
+        );
 
-      // 3. Present Payment Sheet
-      await Stripe.instance.presentPaymentSheet();
+        // 3. Present Payment Sheet
+        await Stripe.instance.presentPaymentSheet();
 
-      // 4. On Success, Verify with Backend & Create Appointment
-      await _handlePaymentSuccess(clientSecret);
+        // 4. On Success, Verify with Backend & Create Appointment
+        await _handlePaymentSuccess(clientSecret);
+      }
 
     } on StripeException catch (e) {
       debugPrint('Stripe Error: ${e.error.localizedMessage}');
@@ -126,6 +134,92 @@ class _PaymentScreenState extends State<PaymentScreen> {
         });
       }
     }
+  }
+
+  Future<void> _simulateWebPayment(String paymentIntentId) async {
+    // Show a simulated processing dialog
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: Color(0xFF009688)),
+            SizedBox(height: 20),
+            Text('Simulating Secure Payment...', style: TextStyle(fontWeight: FontWeight.bold)),
+            SizedBox(height: 10),
+            Text('Please do not close this window.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        ),
+      ),
+    );
+
+    // Wait for 2 seconds to feel "real"
+    await Future.delayed(const Duration(seconds: 2));
+
+    final token = await _storage.read(key: 'jwt_token');
+    final response = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}/payments/simulate-success'),
+      headers: {
+        'Content-Type': 'application/json',
+        'x-auth-token': token ?? '',
+      },
+      body: jsonEncode({'paymentIntentId': paymentIntentId}),
+    );
+
+    if (!mounted) return;
+    Navigator.pop(context); // Close dialog
+
+    if (response.statusCode == 200) {
+      final verifyData = jsonDecode(response.body);
+      final appointment = verifyData['appointment'];
+      
+      if (appointment != null) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => BookingSuccessScreen(
+              doctorName: widget.doctorName,
+              hospitalName: widget.hospitalName,
+              appointmentId: appointment['_id'],
+              date: DateFormat('MMM d, yyyy - h:mm a').format(DateTime.parse(appointment['date'] ?? DateTime.now().toIso8601String())),
+              qrData: appointment['qrCodeData'],
+              appointmentDate: widget.appointmentDate,
+            ),
+          ),
+        );
+      }
+    } else {
+      _showErrorSnackBar('Simulation failed: ${response.body}');
+    }
+  }
+
+  Future<Map<String, dynamic>?> _createPaymentIntentData() async {
+    final token = await _storage.read(key: 'jwt_token');
+    final response = await http.post(
+      Uri.parse('${ApiConstants.baseUrl}/payments/create-intent'),
+      headers: {
+        'Content-Type': 'application/json',
+        'x-auth-token': token ?? '',
+      },
+      body: jsonEncode({
+        'amount': widget.amount,
+        'metadata': {
+          'doctorId': widget.doctorId,
+          'doctorName': widget.doctorName,
+          'hospitalName': widget.hospitalName,
+          'appointmentDate': widget.appointmentDate.toIso8601String(),
+        }
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    return null;
   }
 
   Future<String?> _createPaymentIntent() async {
@@ -285,7 +379,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 15),
-
+              
               // Payment Methods
               _buildPaymentMethodOption(
                 id: 'stripe',

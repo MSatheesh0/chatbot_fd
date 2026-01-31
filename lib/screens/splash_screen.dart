@@ -67,68 +67,37 @@ class _SplashScreenState extends State<SplashScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Spacer(),
-                // Avatars Group
-                SizedBox(
-                  height: 120,
-                  width: 200,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Left Avatar (Man)
-                      Positioned(
-                        left: 0,
-                        top: 10,
-                        child: CircleAvatar(
-                          radius: 35,
-                          backgroundColor: Colors.white,
-                          child: CircleAvatar(
-                            radius: 32,
-                            backgroundColor: Colors.blue[100],
-                            backgroundImage: const NetworkImage('https://api.dicebear.com/7.x/avataaars/png?seed=Felix'), // Placeholder
-                          ),
-                        ),
-                      ),
-                      // Right Avatar (Blonde Woman)
-                      Positioned(
-                        right: 0,
-                        top: 10,
-                        child: CircleAvatar(
-                          radius: 35,
-                          backgroundColor: Colors.white,
-                          child: CircleAvatar(
-                            radius: 32,
-                            backgroundColor: Colors.pink[100],
-                            backgroundImage: const NetworkImage('https://api.dicebear.com/7.x/avataaars/png?seed=Aneka'), // Placeholder
-                          ),
-                        ),
-                      ),
-                      // Center Avatar (Woman with black hair)
-                      Positioned(
-                        top: 0,
-                        child: CircleAvatar(
-                          radius: 45,
-                          backgroundColor: Colors.white,
-                          child: CircleAvatar(
-                            radius: 42,
-                            backgroundColor: Colors.green[100],
-                            backgroundImage: const NetworkImage('https://api.dicebear.com/7.x/avataaars/png?seed=Bella'), // Placeholder
-                          ),
-                        ),
+                // App Logo
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 20,
+                        spreadRadius: 5,
                       ),
                     ],
+                  ),
+                  child: Image.asset(
+                    'assets/app_icon.png',
+                    height: 180,
+                    width: 180,
                   ),
                 ),
                 const SizedBox(height: 30),
                 
                 // Title
                 const Text(
-                  'Bitmoji',
+                  'MoodMoji',
                   style: TextStyle(
-                    fontSize: 40,
+                    fontSize: 42,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
-                    letterSpacing: 1.0,
-                    fontFamily: 'Roboto', // Ensure a clean font
+                    letterSpacing: 1.5,
+                    fontFamily: 'Roboto',
                   ),
                 ),
                 const SizedBox(height: 12),

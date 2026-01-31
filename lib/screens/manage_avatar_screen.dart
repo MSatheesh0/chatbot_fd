@@ -17,28 +17,58 @@ class _ManageAvatarScreenState extends State<ManageAvatarScreen> {
   final _storage = const FlutterSecureStorage();
   List<dynamic> _avatars = [];
   bool _isLoading = true;
+  int _currentPage = 1;
+  bool _hasMore = true;
+  bool _isLoadMoreRunning = false;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _fetchAvatars();
+    _scrollController.addListener(_loadMore);
   }
 
-  Future<void> _fetchAvatars() async {
-    setState(() => _isLoading = true);
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _loadMore() async {
+    if (_hasMore && !_isLoading && !_isLoadMoreRunning && _scrollController.position.extentAfter < 300) {
+      setState(() => _isLoadMoreRunning = true);
+      _currentPage++;
+      await _fetchAvatars(isLoadMore: true);
+      setState(() => _isLoadMoreRunning = false);
+    }
+  }
+
+  Future<void> _fetchAvatars({bool isLoadMore = false}) async {
+    if (!isLoadMore) {
+      setState(() {
+        _isLoading = true;
+        _currentPage = 1;
+        _avatars = [];
+      });
+    }
+    
     try {
       final token = await _storage.read(key: 'jwt_token');
       final response = await http.get(
-        Uri.parse(ApiConstants.avatarsUrl),
+        Uri.parse('${ApiConstants.avatarsUrl}?page=$_currentPage&limit=3'),
         headers: {
           'Content-Type': 'application/json',
           'x-auth-token': token ?? '',
         },
       );
-
+      
       if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<dynamic> newAvatars = data['avatars'];
         setState(() {
-          _avatars = jsonDecode(response.body);
+          _avatars.addAll(newAvatars);
+          _hasMore = _currentPage < data['totalPages'];
           _isLoading = false;
         });
       } else {
@@ -180,6 +210,7 @@ class _ManageAvatarScreenState extends State<ManageAvatarScreen> {
                               ),
                             )
                           : GridView.builder(
+                              controller: _scrollController,
                               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                                 crossAxisCount: 2,
@@ -187,8 +218,15 @@ class _ManageAvatarScreenState extends State<ManageAvatarScreen> {
                                 mainAxisSpacing: 16,
                                 childAspectRatio: 0.8,
                               ),
-                              itemCount: _avatars.length,
+                              itemCount: _avatars.length + (_isLoadMoreRunning ? 1 : 0),
                               itemBuilder: (context, index) {
+                                if (index == _avatars.length) {
+                                  return Center(
+                                    child: CircularProgressIndicator(
+                                      color: isDark ? Colors.blueAccent : const Color(0xFF1565C0),
+                                    ),
+                                  );
+                                }
                                 final avatar = _avatars[index];
                                 final bool isActive = avatar['isActive'] ?? false;
 

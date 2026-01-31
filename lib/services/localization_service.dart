@@ -273,6 +273,13 @@ class AppLocalizations {
       'select_all': 'Select All',
       'deselect_all': 'Deselect All',
       'items_selected': 'items selected',
+      'sensitive_alert': 'Sensitive Alert',
+      'risk_level': 'Risk Level',
+      'category': 'Category',
+      'timestamp': 'Timestamp',
+      'detected_language': 'Detected Language',
+      'doctor_suggestion_msg': 'I\'m here for you. Would you like to book a doctor appointment to talk more about this?',
+      'book_now': 'BOOK NOW',
     },
     'es': {
       'settings': 'Ajustes',

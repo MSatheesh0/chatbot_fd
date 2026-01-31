@@ -5,6 +5,7 @@ import 'package:alarm/alarm.dart';
 import 'package:alarm/model/volume_settings.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'tts_service.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 
 class ReminderService {
   static final ReminderService _instance = ReminderService._internal();
@@ -66,20 +67,23 @@ class ReminderService {
   }
 
   Future<void> _checkXiaomiPermissions() async {
-    // This is a heuristic check. We can't programmatically check the "Display pop-up" permission 
-    // on Xiaomi easily, but we can detect the manufacturer and guide the user.
-    // For now, we'll rely on the user manually enabling it via the settings we open.
-    // We can't easily import device_info_plus here without adding it to pubspec, 
-    // but we can assume if the user is having issues, they might need to check this.
-    debugPrint("Checking permissions...");
+    if (kIsWeb) return;
+    
+    final deviceInfo = DeviceInfoPlugin();
+    final androidInfo = await deviceInfo.androidInfo;
+    
+    if (androidInfo.manufacturer.toLowerCase() == 'xiaomi') {
+      debugPrint("📱 Xiaomi device detected. Checking extra permissions...");
+      // We can't programmatically check the specific "Display pop-up" permission,
+      // so we should guide the user if they haven't enabled it.
+      // For now, we'll rely on the standard request. 
+      // If the overlay fails to show, we might need to prompt the user in the main app.
+    }
   }
   
   // Helper to open settings for Xiaomi
   Future<void> openXiaomiPermissions() async {
-    // There is no direct intent for "Other Permissions" on all MIUI versions,
-    // but opening App Settings is the safest bet.
     await FlutterOverlayWindow.requestPermission(); 
-    // The user has to manually go to "Other Permissions" -> "Display pop-up windows..."
   }
 
   Future<void> scheduleReminder({
@@ -168,7 +172,7 @@ class ReminderService {
           alignment: OverlayAlignment.center,
           visibility: NotificationVisibility.visibilityPublic,
           positionGravity: PositionGravity.auto,
-          height: 500,
+          height: WindowSize.matchParent,
           width: WindowSize.matchParent,
         );
         debugPrint('✅ Overlay show command sent');

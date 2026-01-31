@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import '../constants.dart';
 
 class AvatarView extends StatefulWidget {
   final String avatarUrl;
@@ -8,6 +9,7 @@ class AvatarView extends StatefulWidget {
   final String emotion;
   final double speed;
   final String eyeState;
+  final bool isTalking;
 
   const AvatarView({
     super.key,
@@ -16,6 +18,7 @@ class AvatarView extends StatefulWidget {
     this.emotion = 'neutral',
     this.speed = 1.0,
     this.eyeState = 'normal',
+    this.isTalking = false,
   });
 
   @override
@@ -38,7 +41,8 @@ class _AvatarViewState extends State<AvatarView> {
     if (oldWidget.action != widget.action || 
         oldWidget.emotion != widget.emotion ||
         oldWidget.speed != widget.speed ||
-        oldWidget.eyeState != widget.eyeState) {
+        oldWidget.eyeState != widget.eyeState ||
+        oldWidget.isTalking != widget.isTalking) {
       _updateAvatarState();
     }
     if (oldWidget.avatarUrl != widget.avatarUrl) {
@@ -77,11 +81,24 @@ class _AvatarViewState extends State<AvatarView> {
 
   void _updateAvatarState() {
     if (_isPageLoaded) {
-      _controller.runJavaScript('if(window.updateState) updateState("${widget.action}", "${widget.emotion}", ${widget.speed}, "${widget.eyeState}")');
+      // Ensure strings are escaped for JS
+      final action = widget.action.replaceAll('"', '\\"');
+      final emotion = widget.emotion.replaceAll('"', '\\"');
+      final eyeState = widget.eyeState.replaceAll('"', '\\"');
+      
+      final script = 'if(window.updateState) window.updateState("$action", "$emotion", ${widget.speed}, "$eyeState", ${widget.isTalking})';
+      debugPrint('AvatarView: Running JS: $script');
+      _controller.runJavaScript(script);
     }
   }
 
   String _getHtmlContent() {
+    // Clean base URL to avoid double slashes
+    String baseUrl = ApiConstants.baseUrl;
+    if (baseUrl.endsWith('/')) {
+      baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+    }
+
     return '''
 <!DOCTYPE html>
 <html>
@@ -89,7 +106,7 @@ class _AvatarViewState extends State<AvatarView> {
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        body { margin: 0; overflow: hidden; background: transparent; } /* Transparent background */
+        body { margin: 0; overflow: hidden; background: transparent; }
         canvas { width: 100vw; height: 100vh; display: block; outline: none; }
         #status {
             position: absolute;
@@ -102,55 +119,30 @@ class _AvatarViewState extends State<AvatarView> {
             font-family: monospace;
             font-size: 12px;
             z-index: 1000;
-            max-width: 80%;
+            display: none;
             pointer-events: none;
-        }
-        #controls {
-            position: absolute;
-            top: 100px;
-            left: 20px;
-            z-index: 1001;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 5px;
-        }
-        button {
-            background: rgba(0, 0, 0, 0.6); color: white; border: 1px solid #666;
-            padding: 8px 12px; cursor: pointer; border-radius: 4px;
-            font-size: 12px;
         }
     </style>
     <script>
         window.pendingState = null;
         window.isSceneReady = false;
 
-        window.updateState = function(action, emotion, speed, eyeState) {
+        window.updateState = function(action, emotion, speed, eyeState, isTalking) {
+            console.log("updateState called:", action, emotion);
             if (!window.isSceneReady) {
                 console.log("Queuing state update:", action);
-                window.pendingState = { action, emotion, speed, eyeState };
+                window.pendingState = { action, emotion, speed, eyeState, isTalking };
                 return;
             }
             if (window.moduleUpdateState) {
-                window.moduleUpdateState(action, emotion, speed, eyeState);
+                window.moduleUpdateState(action, emotion, speed, eyeState, isTalking);
             }
         };
     </script>
 </head>
 <body>
-    <div id="status">Initializing WebView...</div>
-    <div id="controls">
-        <button onclick="testAnim('idle')">Idle</button>
-        <button onclick="testAnim('wave')">Wave</button>
-        <button onclick="testAnim('happy')">Happy</button>
-        <button onclick="forceFallback()">Force Fallback</button>
-        <button onclick="location.reload()">Reload</button>
-    </div>
+    <div id="status">Initializing...</div>
     <script type="module">
-        window.onerror = function(message, source, lineno, colno, error) {
-            const el = document.getElementById('status');
-            if(el) el.innerHTML += "<br><span style='color:red'>JS Error: " + message + "</span>";
-        };
-
         import * as THREE from 'https://esm.sh/three@0.154.0';
         import { GLTFLoader } from 'https://esm.sh/three@0.154.0/examples/jsm/loaders/GLTFLoader';
         import { FBXLoader } from 'https://esm.sh/three@0.154.0/examples/jsm/loaders/FBXLoader';
@@ -160,297 +152,294 @@ class _AvatarViewState extends State<AvatarView> {
         let currentActionName = 'idle';
         let morphTargetMesh = null;
         let targetMorphs = {};
+        const BASE_URL = '$baseUrl';
         
-        // PUBLIC FALLBACK URLS
         const fallbackAnims = {
             'idle': 'https://models.readyplayer.me/animations/idle.fbx',
             'wave': 'https://raw.githubusercontent.com/readyplayerme/visage/master/animations/waving.fbx',
             'walk': 'https://models.readyplayer.me/animations/walking.fbx',
             'happy': 'https://raw.githubusercontent.com/readyplayerme/visage/master/animations/idle_happy.fbx',
             'angry': 'https://raw.githubusercontent.com/readyplayerme/visage/master/animations/idle_angry.fbx',
-            'excited': 'https://raw.githubusercontent.com/readyplayerme/visage/master/animations/idle_happy.fbx',
-            'talking_0': 'http://10.0.2.2:5000/animations/talking.fbx',
-            'talking_1': 'http://10.0.2.2:5000/animations/talking.fbx',
-            'talking_2': 'http://10.0.2.2:5000/animations/talking.fbx',
-            'laughing': 'https://raw.githubusercontent.com/readyplayerme/visage/master/animations/idle_happy.fbx',
-            'crying': 'https://models.readyplayer.me/animations/idle.fbx',
-            'rumba': 'https://models.readyplayer.me/animations/idle.fbx'
+            'talking': BASE_URL + '/animations/Talking.fbx'
         };
 
-        const FALLBACK_AVATAR = 'https://models.readyplayer.me/64b73b537c6e7f7636363636.glb';
+        const FALLBACK_AVATAR = 'https://models.readyplayer.me/638df693d72bffc6fa17d4f2.glb';
 
         function updateStatus(msg) {
+            console.log('[AvatarView]', msg);
             const el = document.getElementById('status');
             if(el) el.innerHTML = msg;
-            console.log('[Status]', msg);
         }
-
-        window.forceFallback = function() {
-            updateStatus("Forcing Fallback Avatar...");
-            loadAvatar(FALLBACK_AVATAR);
-        };
-
-        const emotionMap = {
-            'happy': { 'mouthSmile': 1.0, 'eyeSquintLeft': 0.5, 'eyeSquintRight': 0.5, 'browInnerUp': 0.0 },
-            'sad': { 'mouthFrownLeft': 1.0, 'mouthFrownRight': 1.0, 'browInnerUp': 1.0, 'eyeSquintLeft': 0.0 },
-            'angry': { 'browDownLeft': 1.0, 'browDownRight': 1.0, 'mouthFrownLeft': 0.5, 'mouthFrownRight': 0.5 },
-            'surprised': { 'jawOpen': 0.3, 'browOuterUpLeft': 1.0, 'browOuterUpRight': 1.0 },
-            'excited': { 'mouthSmile': 0.8, 'eyeWideLeft': 0.6, 'eyeWideRight': 0.6, 'jawOpen': 0.1 },
-            'neutral': { 'mouthSmile': 0.0, 'browInnerUp': 0.0, 'browDownLeft': 0.0, 'jawOpen': 0.0 }
-        };
-
-        const eyeStateMap = {
-            'normal': { 'eyeBlinkLeft': 0.0, 'eyeBlinkRight': 0.0, 'eyeWideLeft': 0.0, 'eyeWideRight': 0.0 },
-            'focused': { 'eyeSquintLeft': 0.6, 'eyeSquintRight': 0.6 },
-            'soft': { 'eyeSquintLeft': 0.3, 'eyeSquintRight': 0.3 },
-            'blink': { 'eyeBlinkLeft': 1.0, 'eyeBlinkRight': 1.0 }
-        };
-        
-        let lastBlinkTime = 0;
-        let blinkState = 'open'; 
-        let blinkDuration = 0.15; 
-        let blinkTimer = 0;
-        let nextBlinkTime = 3.0;
-        const blinkIntervals = { 'normal': [3.0, 5.0], 'soft': [4.0, 6.0], 'focused': [6.0, 10.0] };
 
         init();
 
         function init() {
-            updateStatus("Initializing 3D Scene...");
             try {
                 scene = new THREE.Scene();
-                
-                // Camera setup
-                camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-                camera.position.set(0, 1.4, 2.5); // Standard RPM view
+                camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
+                camera.position.set(0, 1.45, 1.8); // Closer to face
 
-                renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
                 renderer.setPixelRatio(window.devicePixelRatio);
                 renderer.setSize(window.innerWidth, window.innerHeight);
                 renderer.outputColorSpace = THREE.SRGBColorSpace;
-                renderer.setClearColor(0x000000, 0); // Transparent clear color
+                renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                renderer.toneMappingExposure = 1.2;
+                renderer.setClearColor(0x000000, 0);
                 document.body.appendChild(renderer.domElement);
 
-                // Lighting
-                const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
-                scene.add(ambientLight);
+                // Enhanced Lighting System for better facial definition
+                const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.5);
+                hemiLight.position.set(0, 20, 0);
+                scene.add(hemiLight);
 
                 const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-                dirLight.position.set(2, 2, 5);
+                dirLight.position.set(3, 10, 10);
+                dirLight.castShadow = true;
                 scene.add(dirLight);
 
-                // Determine Avatar URL
+                // Key light for face
+                const keyLight = new THREE.PointLight(0xffffff, 1.2);
+                keyLight.position.set(1, 1.6, 2);
+                scene.add(keyLight);
+
+                // Rim light for definition
+                const rimLight = new THREE.PointLight(0xffffff, 0.8);
+                rimLight.position.set(-1, 1.6, -1);
+                scene.add(rimLight);
+
                 let avatarUrl = '${widget.avatarUrl}';
                 if (!avatarUrl || avatarUrl === 'null' || avatarUrl.trim() === '' || !avatarUrl.startsWith('http')) {
                     avatarUrl = FALLBACK_AVATAR;
-                    updateStatus("Invalid URL. Using Fallback.");
                 } else {
-                    updateStatus("URL Found. Loading...");
+                    // Force high quality parameters logic
+                    if (!avatarUrl.includes('?')) {
+                        avatarUrl += '?meshLod=0&textureSize=1024';
+                    } else {
+                        if (!avatarUrl.includes('meshLod')) avatarUrl += '&meshLod=0';
+                        if (!avatarUrl.includes('textureSize')) avatarUrl += '&textureSize=1024';
+                    }
                 }
                 
                 loadAvatar(avatarUrl);
-
             } catch (e) {
                 updateStatus("Init Error: " + e.message);
             }
 
-            window.addEventListener('resize', onWindowResize);
-            window.addEventListener('message', handleMessage);
-            
-            window.testAnim = (name) => {
-                 window.moduleUpdateState(name, 'neutral', 1.0, 'normal');
-            };
-            
-            window.moduleUpdateState = (action, emotion, speed, eyeState) => {
-                console.log('UpdateState:', { action, emotion, speed, eyeState });
-                window.currentEyeState = eyeState; 
-                
-                try {
-                    let animName = action.toLowerCase();
-                    
-                    if (animName.startsWith('talking')) {
-                        window.isTalking = true;
-                        if (!animations[animName] && !fallbackAnims[animName]) animName = 'idle';
-                    } else {
-                        window.isTalking = false;
-                    }
-
-                    if (animName === 'talk_hands') animName = 'idle'; 
-                    else if (animName === 'explain_hands') animName = 'idle'; 
-                    else if (animName === 'encourage_hands') animName = 'happy'; 
-                    
-                    if (!animations[animName] && animations[emotion]) animName = emotion;
-
-                    // Safe Animation Fallback
-                    if (!animations[animName] && !fallbackAnims[animName]) {
-                        console.warn(`Animation '\${animName}' not found. Falling back to 'idle'.`);
-                        animName = 'idle';
-                    }
-
-                    let targetAnim = animations[animName];
-                    if (targetAnim) {
-                        if (animName !== currentActionName) {
-                            if (animations[currentActionName]) {
-                                animations[currentActionName].fadeOut(0.5);
-                            }
-                            targetAnim.reset().fadeIn(0.5).play();
-                            currentActionName = animName;
-                        }
-                    } else {
-                        // Fallback to idle if requested animation is missing
-                        if (currentActionName !== 'idle' && animations['idle']) {
-                            if (animations[currentActionName]) animations[currentActionName].fadeOut(0.5);
-                            animations['idle'].reset().fadeIn(0.5).play();
-                            currentActionName = 'idle';
-                        }
-                    }
-                    
-                    if (animations[currentActionName]) {
-                        animations[currentActionName].timeScale = speed || 1.0;
-                    }
-
-                } catch (e) { console.warn("Animation update failed:", e); }
-                
-                try {
-                    if (morphTargetMesh) {
-                        // Safe Emotion Fallback
-                        let emotionTargets = emotionMap[emotion];
-                        if (!emotionTargets) {
-                             console.warn(`Emotion '\${emotion}' not found. Falling back to 'neutral'.`);
-                             emotionTargets = emotionMap['neutral'];
-                        }
-                        const eyeTargets = eyeStateMap[eyeState] || eyeStateMap['normal'];
-                        const allKeys = new Set([...Object.keys(emotionMap).flatMap(k => Object.keys(emotionMap[k])), ...Object.keys(eyeStateMap).flatMap(k => Object.keys(eyeStateMap[k]))]);
-                        allKeys.forEach(key => targetMorphs[key] = 0.0);
-                        Object.entries(emotionTargets).forEach(([key, val]) => targetMorphs[key] = val);
-                        Object.entries(eyeTargets).forEach(([key, val]) => targetMorphs[key] = Math.max(targetMorphs[key] || 0, val));
-                    }
-                } catch (e) { console.warn("Morph target update failed:", e); }
-            };
-        }
-
-        function loadAvatar(url) {
-            if(model) {
-                scene.remove(model);
-                model = null;
-                mixer = null;
-                animations = {};
-                morphTargetMesh = null;
-            }
-
-            const loader = new GLTFLoader();
-            updateStatus("Loading: " + url.split('/').pop());
-            
-            loader.load(url, (gltf) => {
-                updateStatus("Avatar Loaded. Setup...");
-                model = gltf.scene;
-                scene.add(model);
-                
-                // Center model
-                const box = new THREE.Box3().setFromObject(model);
-                const center = box.getCenter(new THREE.Vector3());
-                model.position.x += (model.position.x - center.x);
-                model.position.y -= box.min.y; // Put feet on ground
-                
-                let modelBones = {};
-                model.traverse((child) => {
-                    if (child.isBone) {
-                        modelBones[child.name] = child;
-                    }
-                    if (child.isMesh) {
-                        child.frustumCulled = false; 
-                        if (child.morphTargetDictionary) {
-                            morphTargetMesh = child;
-                            console.log("Morph Targets Found:", Object.keys(child.morphTargetDictionary));
-                        }
-                    }
-                });
-                console.log("Bones Found:", Object.keys(modelBones));
-
-                mixer = new THREE.AnimationMixer(model);
-                
-                // FIX 2: Avatar-First Loading
-                // Show avatar immediately, load animations in background
-                updateStatus("Ready. Companion Active.");
-                setTimeout(() => { 
-                    const statusEl = document.getElementById('status');
-                    if(statusEl) statusEl.style.display = 'none'; 
-                }, 500);
-
-                window.isSceneReady = true;
-                animate(); // Start rendering loop immediately
-
-                // Load animations in background
-                const backendUrl = 'http://172.16.0.200:5000/animations'; 
-                
-                const animsToLoad = [
-                    { url: backendUrl + '/Breathing%20Idle.fbx', name: 'idle' },
-                    { url: backendUrl + '/Happy%20Hand%20Gesture.fbx', name: 'wave' },
-                    { url: backendUrl + '/Walking.fbx', name: 'walk' },
-                    { url: backendUrl + '/Happy.fbx', name: 'happy' },
-                    { url: backendUrl + '/Yelling.fbx', name: 'angry' },
-                    { url: backendUrl + '/Excited.fbx', name: 'excited' }
-                ];
-
-                animsToLoad.forEach(anim => {
-                    loadExternalAnimation(anim.url, anim.name, modelBones, () => {
-                        // If idle loaded and we are currently idle, play it
-                        if (anim.name === 'idle' && currentActionName === 'idle') {
-                            if (animations['idle']) animations['idle'].play();
-                        }
-                    });
-                });
-                
-                // Apply pending state if any
-                if (window.pendingState) {
-                    window.moduleUpdateState(
-                        window.pendingState.action, 
-                        window.pendingState.emotion, 
-                        window.pendingState.speed, 
-                        window.pendingState.eyeState
-                    );
-                    window.pendingState = null;
-                }
-
-            }, undefined, (err) => {
-                updateStatus("Error Loading Avatar: " + err.message);
-                console.error("Failed to load avatar:", err);
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
             });
         }
 
-        function loadExternalAnimation(url, name, modelBones, onSuccess) {
-            const isFbx = url.toLowerCase().endsWith('.fbx');
-            const loader = isFbx ? new FBXLoader() : new GLTFLoader();
-            
-            const boneMap = {
-                'Hips': 'Hips', 'Spine': 'Spine', 'Spine1': 'Spine1', 'Spine2': 'Spine2',
-                'Neck': 'Neck', 'Head': 'Head', 'LeftShoulder': 'LeftShoulder', 'LeftArm': 'LeftArm',
-                'LeftForeArm': 'LeftForeArm', 'LeftHand': 'LeftHand', 'RightShoulder': 'RightShoulder',
-                'RightArm': 'RightArm', 'RightForeArm': 'RightForeArm', 'RightHand': 'RightHand',
-                'LeftUpLeg': 'LeftUpLeg', 'LeftLeg': 'LeftLeg', 'LeftFoot': 'LeftFoot',
-                'RightUpLeg': 'RightUpLeg', 'RightLeg': 'RightLeg', 'RightFoot': 'RightFoot',
-                'mixamorigHips': 'Hips', 'mixamorigSpine': 'Spine', 'mixamorigLeftArm': 'LeftArm', 'mixamorigRightArm': 'RightArm'
-            };
+        function loadAvatar(url) {
+            updateStatus("Loading Avatar...");
+            const loader = new GLTFLoader();
+            loader.load(url, (gltf) => {
+                if(model) scene.remove(model);
+                model = gltf.scene;
+                scene.add(model);
+                
+                const box = new THREE.Box3().setFromObject(model);
+                const center = box.getCenter(new THREE.Vector3());
+                model.position.x += (model.position.x - center.x);
+                model.position.y -= box.min.y;
+                
+                let modelBones = {};
+                model.traverse((child) => {
+                    if (child.isBone) modelBones[child.name] = child;
+                    if (child.isMesh) {
+                        child.frustumCulled = false;
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                        
+                        const materials = Array.isArray(child.material) ? child.material : [child.material];
+                        materials.forEach(mat => {
+                            if (mat) {
+                                mat.transparent = true;
+                                mat.depthWrite = true;
+                                mat.roughness = 0.6; // Slightly more defined
+                                mat.metalness = 0.05;
+                                if (child.name.toLowerCase().includes('eye')) {
+                                    mat.roughness = 0.05;
+                                }
+                                if (child.name.toLowerCase().includes('skin')) {
+                                    mat.roughness = 0.8;
+                                }
+                            }
+                        });
+                        
+                        if (child.morphTargetDictionary) morphTargetMesh = child;
+                    }
+                });
 
+                mixer = new THREE.AnimationMixer(model);
+                
+                // Embedded animations
+                if (gltf.animations && gltf.animations.length > 0) {
+                    gltf.animations.forEach(clip => {
+                        let name = clip.name.toLowerCase();
+                        if (name.includes('idle')) name = 'idle';
+                        animations[name] = mixer.clipAction(clip);
+                    });
+                }
+
+                window.isSceneReady = true;
+                animate();
+
+                // Load external animations
+                const animBase = BASE_URL + '/animations';
+                const anims = [
+                    { url: animBase + '/Breathing%20Idle.fbx', name: 'idle' },
+                    { url: animBase + '/Happy%20Hand%20Gesture.fbx', name: 'wave' },
+                    { url: animBase + '/Walking.fbx', name: 'walk' },
+                    { url: animBase + '/Happy.fbx', name: 'happy' },
+                    { url: animBase + '/Yelling.fbx', name: 'yell' },
+                    { url: animBase + '/Talking.fbx', name: 'talking' },
+                    { url: animBase + '/Sad%20Idle.fbx', name: 'sad' },
+                    { url: animBase + '/Angry.fbx', name: 'angry' },
+                    { url: animBase + '/Angry%20Point.fbx', name: 'angry_point' },
+                    { url: animBase + '/Excited.fbx', name: 'excited' },
+                    { url: animBase + '/Happy%20Walk.fbx', name: 'happy_walk' },
+                    { url: animBase + '/Step%20Hip%20Hop%20Dance.fbx', name: 'dance' },
+                    { url: animBase + '/Sleeping%20Idle.fbx', name: 'sleep' },
+                    { url: animBase + '/Sitting%20Angry.fbx', name: 'sitting_angry' },
+                    { url: animBase + '/Sitting%20Disbelief.fbx', name: 'sitting_disbelief' },
+                    { url: animBase + '/Kneeling%20Idle.fbx', name: 'kneeling' },
+                    { url: animBase + '/Male%20Laying%20Pose.fbx', name: 'laying' },
+                    { url: animBase + '/Rejected.fbx', name: 'rejected' }
+                ];
+
+                anims.forEach(anim => {
+                    loadExternalAnimation(anim.url, anim.name, modelBones);
+                });
+
+                if (window.pendingState) {
+                    window.moduleUpdateState(window.pendingState.action, window.pendingState.emotion, window.pendingState.speed, window.pendingState.eyeState, window.pendingState.isTalking);
+                    window.pendingState = null;
+                }
+                updateStatus("Ready");
+                setTimeout(() => { document.getElementById('status').style.display = 'none'; }, 2000);
+            }, undefined, (err) => {
+                updateStatus("Load Error: " + err.message);
+            });
+        }
+
+        window.queuedAction = null;
+        window.queuedEmotion = null;
+
+        window.moduleUpdateState = (action, emotion, speed, eyeState, isTalking) => {
+            window.isTalking = isTalking;
+            window.currentEyeState = eyeState;
+            window.currentSpeed = speed || 1.0;
+            
+            let animName = action.toLowerCase();
+            if (animName === 'talk' || animName === 'talking') animName = 'talking';
+            
+            // Map common variants
+            const map = { 
+                'sleep': 'sleep', 'sleeping': 'sleep', 
+                'dance': 'dance', 'dancing': 'dance', 
+                'walk': 'walk', 'walking': 'walk',
+                'wave': 'wave', 'waving': 'wave'
+            };
+            if (map[animName]) animName = map[animName];
+
+            // Update currentActionName
+            const oldActionName = currentActionName;
+            currentActionName = animName;
+
+            if (animations[animName]) {
+                window.queuedAction = null; // Clear queue if found
+                if (animName !== oldActionName || ['wave', 'yell', 'angry_point', 'excited', 'dance'].includes(animName)) {
+                    if (animations[oldActionName]) animations[oldActionName].fadeOut(0.3);
+                    animations[animName].reset().fadeIn(0.3).play();
+                }
+                animations[animName].timeScale = window.currentSpeed;
+            } else {
+                // Animation not loaded yet, queue it
+                console.log("Animation not loaded yet, queuing:", animName);
+                window.queuedAction = animName;
+                
+                // Fallback to talking/idle while waiting
+                const fallback = animations['talking'] ? 'talking' : 'idle';
+                if (fallback && fallback !== oldActionName && animations[fallback]) {
+                    if (animations[oldActionName]) animations[oldActionName].fadeOut(0.3);
+                    animations[fallback].reset().fadeIn(0.3).play();
+                }
+            }
+
+            // Morph targets for emotions
+            if (morphTargetMesh) {
+                const emotions = {
+                    'happy': { 
+                        'mouthSmile': 0.8, 
+                        'mouthSmileLeft': 0.8, 
+                        'mouthSmileRight': 0.8,
+                        'eyeSquintLeft': 0.5, 
+                        'eyeSquintRight': 0.5,
+                        'cheekPuff': 0.2
+                    },
+                    'sad': { 
+                        'mouthFrownLeft': 0.7, 
+                        'mouthFrownRight': 0.7, 
+                        'browInnerUp': 0.6,
+                        'eyeSquintLeft': 0.2,
+                        'eyeSquintRight': 0.2
+                    },
+                    'angry': { 
+                        'browDownLeft': 1.0, 
+                        'browDownRight': 1.0, 
+                        'mouthFrownLeft': 0.5,
+                        'mouthFrownRight': 0.5,
+                        'eyeSquintLeft': 0.4,
+                        'eyeSquintRight': 0.4
+                    },
+                    'surprised': { 
+                        'jawOpen': 0.4, 
+                        'browOuterUpLeft': 1.0, 
+                        'browOuterUpRight': 1.0,
+                        'eyeWideLeft': 0.6,
+                        'eyeWideRight': 0.6
+                    },
+                    'excited': { 
+                        'mouthSmile': 1.0, 
+                        'mouthSmileLeft': 1.0,
+                        'mouthSmileRight': 1.0,
+                        'jawOpen': 0.2,
+                        'eyeWideLeft': 0.4,
+                        'eyeWideRight': 0.4
+                    },
+                    'neutral': {}
+                };
+                const targets = emotions[emotion] || emotions['neutral'];
+                Object.keys(targetMorphs).forEach(k => targetMorphs[k] = 0);
+                Object.entries(targets).forEach(([k, v]) => targetMorphs[k] = v);
+            }
+        };
+
+        function loadExternalAnimation(url, name, modelBones) {
+            const loader = new FBXLoader();
             loader.load(url, (asset) => {
                 let clip = asset.animations[0];
                 if (clip) {
-                    // Retargeting logic
+                    clip.tracks = clip.tracks.filter(track => track.name.includes('.quaternion'));
+
                     clip.tracks.forEach(track => {
-                        let cleanName = track.name.replace(/mixamorig:|mixamorig1:/g, '');
+                        let cleanName = track.name.replace(/.*:|.*1:/g, '');
                         let trackBoneName = cleanName.split('.')[0];
                         let property = cleanName.split('.').slice(1).join('.');
+                        
                         let targetBoneName = null;
-                        if (modelBones[trackBoneName]) targetBoneName = trackBoneName;
-                        else {
+                        if (modelBones[trackBoneName]) {
+                            targetBoneName = trackBoneName;
+                        } else {
                             const lower = trackBoneName.toLowerCase();
-                            const match = Object.keys(modelBones).find(k => k.toLowerCase() === lower);
+                            const match = Object.keys(modelBones).find(k => k.toLowerCase() === lower || k.toLowerCase().includes(lower.replace('mixamorig', '')));
                             if (match) targetBoneName = match;
                         }
-                        if (!targetBoneName && boneMap[trackBoneName]) {
-                            let mappedName = boneMap[trackBoneName];
-                            if (modelBones[mappedName]) targetBoneName = mappedName;
-                        }
+
                         if (targetBoneName) {
                             track.name = targetBoneName + '.' + property;
                         }
@@ -458,82 +447,92 @@ class _AvatarViewState extends State<AvatarView> {
 
                     const action = mixer.clipAction(clip);
                     animations[name] = action;
-                    if (name === 'idle' && currentActionName === 'idle') action.reset().play();
-                    if (onSuccess) onSuccess();
+                    
+                    // If this was the queued action, play it now
+                    if (name === window.queuedAction) {
+                        console.log("Playing queued animation:", name);
+                        if (animations[currentActionName]) animations[currentActionName].fadeOut(0.3);
+                        action.reset().fadeIn(0.3).play();
+                        action.timeScale = window.currentSpeed || 1.0;
+                        currentActionName = name;
+                        window.queuedAction = null;
+                    } else if (name === 'idle' && currentActionName === 'idle') {
+                        action.play();
+                    }
+                }
+            }, undefined, (err) => {
+                console.warn("Failed to load animation:", name, err);
+                if (fallbackAnims[name] && fallbackAnims[name] !== url) {
+                    loadExternalAnimation(fallbackAnims[name], name, modelBones);
+                }
+            });
+        }
 
-        function handleMessage(event) {
-             if (typeof event.data === 'string' && event.data.startsWith('updateState')) {
-                try { eval(event.data); } catch (e) { console.error('Error executing command:', e); }
-            }
-        }
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
+        let lastBlinkTime = 0;
+        let blinkState = 'open';
+        let blinkDuration = 0.12;
+        let blinkTimer = 0;
+        let nextBlinkTime = 3.0;
+        const blinkIntervals = { 'normal': [3.0, 5.0], 'soft': [4.0, 6.0], 'focused': [6.0, 10.0] };
+
         function animate() {
             requestAnimationFrame(animate);
-            const delta = 0.016; 
+            const delta = 0.016;
             if (mixer) mixer.update(delta);
-            
-            lastBlinkTime += delta;
-            if (blinkState === 'open' && lastBlinkTime > nextBlinkTime) {
-                blinkState = 'closing'; blinkTimer = 0;
-            } else if (blinkState === 'closing') {
-                blinkTimer += delta; if (blinkTimer >= blinkDuration / 2) blinkState = 'opening';
-            } else if (blinkState === 'opening') {
-                blinkTimer += delta;
-                if (blinkTimer >= blinkDuration) {
-                    blinkState = 'open'; lastBlinkTime = 0;
-                    const state = window.currentEyeState || 'normal';
-                    const range = blinkIntervals[state] || blinkIntervals['normal'];
-                    nextBlinkTime = range[0] + Math.random() * (range[1] - range[0]);
-                }
-            }
 
-            if (morphTargetMesh && morphTargetMesh.morphTargetDictionary) {
+            if (morphTargetMesh) {
+                // Blinking Logic
+                lastBlinkTime += delta;
+                if (blinkState === 'open' && lastBlinkTime > nextBlinkTime) {
+                    blinkState = 'closing'; blinkTimer = 0;
+                } else if (blinkState === 'closing') {
+                    blinkTimer += delta; if (blinkTimer >= blinkDuration / 2) blinkState = 'opening';
+                } else if (blinkState === 'opening') {
+                    blinkTimer += delta;
+                    if (blinkTimer >= blinkDuration) {
+                        blinkState = 'open'; lastBlinkTime = 0;
+                        const state = window.currentEyeState || 'normal';
+                        const range = blinkIntervals[state] || blinkIntervals['normal'];
+                        nextBlinkTime = range[0] + Math.random() * (range[1] - range[0]);
+                    }
+                }
+
                 let currentTargets = { ...targetMorphs };
-                
+
+                // Talking animation - Enhanced with visemes if available
                 if (window.isTalking) {
-                     const time = Date.now() * 0.015; 
-                     const openAmount = (Math.sin(time) * 0.5 + 0.5) * (Math.cos(time * 0.8) * 0.5 + 0.5); 
-                     let mouthTarget = morphTargetMesh.morphTargetDictionary['mouthOpen'] !== undefined ? 'mouthOpen' 
-                                       : morphTargetMesh.morphTargetDictionary['viseme_aa'] !== undefined ? 'viseme_aa' : null;
-                     
-                     // Safe fallback: use the first available morph target if specific ones are missing (unlikely but safe)
-                     if (!mouthTarget && Object.keys(morphTargetMesh.morphTargetDictionary).length > 0) {
-                        mouthTarget = Object.keys(morphTargetMesh.morphTargetDictionary)[0];
-                     }
-
-                     if (mouthTarget) {
-                         currentTargets[mouthTarget] = Math.max(currentTargets[mouthTarget] || 0, openAmount * 0.6);
-                     }
+                    const open = (Math.sin(Date.now() * 0.01) * 0.5 + 0.5) * 0.6;
+                    let mouthTarget = morphTargetMesh.morphTargetDictionary['mouthOpen'] !== undefined ? 'mouthOpen' 
+                                     : morphTargetMesh.morphTargetDictionary['viseme_aa'] !== undefined ? 'viseme_aa' : null;
+                    if (mouthTarget) currentTargets[mouthTarget] = Math.max(currentTargets[mouthTarget] || 0, open);
+                    
+                    // Add slight cheek movement for realism
+                    if (morphTargetMesh.morphTargetDictionary['cheekPuff']) {
+                        currentTargets['cheekPuff'] = Math.max(currentTargets['cheekPuff'] || 0, open * 0.2);
+                    }
                 }
 
+                // Apply Blinking to currentTargets
                 if (blinkState !== 'open') {
-                    let blinkWeight = 0;
-                    if (blinkState === 'closing') blinkWeight = blinkTimer / (blinkDuration / 2);
-                    else blinkWeight = 1.0 - ((blinkTimer - (blinkDuration / 2)) / (blinkDuration / 2));
-                    currentTargets['eyeBlinkLeft'] = Math.max(currentTargets['eyeBlinkLeft'] || 0, blinkWeight);
-                    currentTargets['eyeBlinkRight'] = Math.max(currentTargets['eyeBlinkRight'] || 0, blinkWeight);
+                    let bw = blinkState === 'closing' ? blinkTimer / (blinkDuration / 2) : 1.0 - ((blinkTimer - (blinkDuration / 2)) / (blinkDuration / 2));
+                    currentTargets['eyeBlinkLeft'] = Math.max(currentTargets['eyeBlinkLeft'] || 0, bw);
+                    currentTargets['eyeBlinkRight'] = Math.max(currentTargets['eyeBlinkRight'] || 0, bw);
                 }
                 
-                Object.keys(currentTargets).forEach(key => {
-                    if (morphTargetMesh.morphTargetDictionary[key] !== undefined) {
-                        const idx = morphTargetMesh.morphTargetDictionary[key];
-                        const current = morphTargetMesh.morphTargetInfluences[idx];
-                        const target = currentTargets[key];
-                        morphTargetMesh.morphTargetInfluences[idx] += (target - current) * 0.1; 
+                // Apply all morphs smoothly
+                Object.entries(currentTargets).forEach(([key, val]) => {
+                    const idx = morphTargetMesh.morphTargetDictionary[key];
+                    if (idx !== undefined) {
+                        morphTargetMesh.morphTargetInfluences[idx] += (val - morphTargetMesh.morphTargetInfluences[idx]) * 0.15;
                     }
                 });
             }
-            
             renderer.render(scene, camera);
         }
     </script>
 </body>
 </html>
-    ''';
+''';
   }
 
   @override

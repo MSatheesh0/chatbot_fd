@@ -138,7 +138,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.person_add_outlined, size: 80, color: isDark ? Colors.white : const Color(0xFF6A11CB)),
+                      Image.asset(
+                        'assets/app_icon.png',
+                        height: 120,
+                        width: 120,
+                      ),
                       const SizedBox(height: 20),
                       Text(
                         l10n.translate('create_account'),

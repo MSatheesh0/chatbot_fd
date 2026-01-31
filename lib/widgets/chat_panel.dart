@@ -100,13 +100,15 @@ class _ChatPanelState extends State<ChatPanel> {
 
   void _initSpeech() async {
     try {
-      var status = await Permission.microphone.status;
-      if (!status.isGranted) {
-        status = await Permission.microphone.request();
+      if (!kIsWeb) {
+        var status = await Permission.microphone.status;
         if (!status.isGranted) {
-          debugPrint('Microphone permission denied');
-          setState(() => _speechEnabled = false);
-          return;
+          status = await Permission.microphone.request();
+          if (!status.isGranted) {
+            debugPrint('Microphone permission denied');
+            setState(() => _speechEnabled = false);
+            return;
+          }
         }
       }
 
@@ -147,20 +149,43 @@ class _ChatPanelState extends State<ChatPanel> {
       _initSpeech();
       return;
     }
+
+    if (_isListening || _speechToText.isListening) {
+      _stopListening();
+      return;
+    }
     
+    final langCode = SettingsService().locale.value.languageCode;
+    final sttLocale = langCode == 'ta' ? 'ta-IN' : 
+                     langCode == 'hi' ? 'hi-IN' : 
+                     langCode == 'ar' ? 'ar-SA' :
+                     langCode == 'zh' ? 'zh-CN' :
+                     langCode == 'ja' ? 'ja-JP' :
+                     langCode == 'ko' ? 'ko-KR' :
+                     langCode == 'fr' ? 'fr-FR' :
+                     langCode == 'de' ? 'de-DE' :
+                     langCode == 'es' ? 'es-ES' : 'en-US';
+    debugPrint('STT (Panel): Listening with locale: $sttLocale');
+
     await _speechToText.listen(
       onResult: (result) {
-        setState(() {
-          _lastWords = result.recognizedWords;
-          _messageController.text = _lastWords;
-        });
+        if (mounted) {
+          setState(() {
+            _lastWords = result.recognizedWords;
+            _messageController.text = _lastWords;
+          });
+        }
+        
+        if (result.finalResult && result.recognizedWords.trim().isNotEmpty) {
+          _sendMessage();
+        }
       },
       listenFor: const Duration(seconds: 30),
       pauseFor: const Duration(seconds: 5),
       partialResults: true,
-      localeId: 'en_US',
+      localeId: sttLocale,
       cancelOnError: true,
-      listenMode: ListenMode.confirmation,
+      listenMode: ListenMode.dictation,
     );
     setState(() => _isListening = true);
   }
@@ -300,7 +325,7 @@ class _ChatPanelState extends State<ChatPanel> {
                 currentEyeState = avatar['eye_state'] ?? 'normal';
 
                 // Trigger avatar update immediately
-                widget.onMessageSent("", currentAction, currentEmotion, currentSpeed, currentEyeState);
+                widget.onMessageSent(fullResponse, currentAction, currentEmotion, currentSpeed, currentEyeState);
               } else if (json['type'] == 'text' || json.containsKey('content')) {
                 final content = json['content'] as String;
                 fullResponse += content;

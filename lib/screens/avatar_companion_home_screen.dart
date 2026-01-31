@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -45,6 +47,10 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
   bool _isChatOpen = false;
   String _selectedMode = 'Mental Health';
   bool _isFirstLoad = true;
+  bool _isTalking = false;
+  Timer? _actionTimer;
+  bool _showDoctorSuggestion = false;
+  Map<String, dynamic>? _lastSafetyAlert;
 
   @override
   void initState() {
@@ -52,6 +58,28 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
     _fetchActiveAvatar();
     _initSpeech();
     _initTts();
+    _setupTtsListener();
+  }
+
+  void _setupTtsListener() {
+    _ttsService.isSpeakingNotifier.addListener(() {
+      if (mounted) {
+        setState(() {
+          _isTalking = _ttsService.isSpeaking;
+          
+          if (_isTalking) {
+            // Only override with 'talk' if we are currently idle or already talking
+            if (_currentAction == 'idle' || _currentAction == 'talking') {
+              _currentAction = 'talk';
+            }
+          } else {
+            // Reset to idle when speaking finishes
+            _currentAction = 'idle';
+            _currentEmotion = 'neutral';
+          }
+        });
+      }
+    });
   }
 
   Future<void> _fetchActiveAvatar() async {
@@ -90,7 +118,7 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
         if (mounted) {
           setState(() {
             // Fallback for debugging animations
-            _avatarUrl = "https://models.readyplayer.me/64b73b537c6e7f7636363636.glb"; 
+            _avatarUrl = "https://models.readyplayer.me/638df693d72bffc6fa17d4f2.glb"; 
             _isLoading = false;
             _currentAction = 'wave';
             _currentEmotion = 'happy';
@@ -105,13 +133,15 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
 
   void _initSpeech() async {
     try {
-      var status = await Permission.microphone.status;
-      if (!status.isGranted) {
-        status = await Permission.microphone.request();
+      if (!kIsWeb) {
+        var status = await Permission.microphone.status;
         if (!status.isGranted) {
-          debugPrint('Microphone permission denied');
-          setState(() => _speechEnabled = false);
-          return;
+          status = await Permission.microphone.request();
+          if (!status.isGranted) {
+            debugPrint('Microphone permission denied');
+            setState(() => _speechEnabled = false);
+            return;
+          }
         }
       }
 
@@ -123,8 +153,13 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
           }
         },
         onError: (error) {
-          debugPrint('Speech error: $error');
-          if (mounted) setState(() => _isListening = false);
+          debugPrint('Speech error: ${error.errorMsg} - ${error.permanent}');
+          if (mounted) {
+            setState(() {
+              _isListening = false;
+              _lastResponse = "Mic Error: ${error.errorMsg}";
+            });
+          }
         },
       );
       
@@ -138,6 +173,7 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
       if (mounted) {
         setState(() {
           _speechEnabled = false;
+          _lastResponse = "Mic Init Failed: $e";
         });
       }
     }
@@ -153,39 +189,97 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
       return;
     }
 
-    if (_isListening) {
+    // Prevent rapid clicks
+    if (_speechToText.isAvailable && (_isListening || _speechToText.isListening)) {
       await _speechToText.stop();
-      setState(() => _isListening = false);
-    } else {
-      setState(() => _isListening = true);
+      if (mounted) setState(() => _isListening = false);
+      return;
+    }
+
+    // Small delay to ensure previous session is fully closed
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    if (mounted) {
+      setState(() {
+        _isListening = true;
+        _lastResponse = "Listening..."; 
+      });
+    }
+      
+    bool wordsDetected = false;
+    try {
+      final langCode = SettingsService().locale.value.languageCode;
+      final sttLocale = langCode == 'ta' ? 'ta-IN' : 
+                       langCode == 'hi' ? 'hi-IN' : 
+                       langCode == 'ar' ? 'ar-SA' :
+                       langCode == 'zh' ? 'zh-CN' :
+                       langCode == 'ja' ? 'ja-JP' :
+                       langCode == 'ko' ? 'ko-KR' :
+                       langCode == 'fr' ? 'fr-FR' :
+                       langCode == 'de' ? 'de-DE' :
+                       langCode == 'es' ? 'es-ES' : 'en-US';
+      debugPrint('STT: Listening with locale: $sttLocale');
+
       await _speechToText.listen(
         onResult: (result) {
+          debugPrint('Speech result: ${result.recognizedWords} (final: ${result.finalResult})');
+          if (result.recognizedWords.isNotEmpty) {
+            wordsDetected = true;
+            if (mounted) {
+              setState(() {
+                _lastResponse = result.recognizedWords;
+              });
+            }
+          }
+          
           if (result.finalResult) {
-            setState(() => _isListening = false);
-            _sendMessage(result.recognizedWords);
+            if (mounted) setState(() => _isListening = false);
+            if (result.recognizedWords.trim().isNotEmpty) {
+              _sendMessage(result.recognizedWords);
+            } else if (wordsDetected) {
+              _sendMessage(_lastResponse);
+            } else {
+              if (mounted) setState(() => _lastResponse = "I didn't catch that. Try again?");
+            }
           }
         },
         listenFor: const Duration(seconds: 30),
         pauseFor: const Duration(seconds: 5),
-        partialResults: false,
-        localeId: SettingsService().locale.value.languageCode == 'en' ? 'en_US' : 
-                 SettingsService().locale.value.languageCode == 'es' ? 'es_ES' :
-                 SettingsService().locale.value.languageCode == 'fr' ? 'fr_FR' :
-                 SettingsService().locale.value.languageCode == 'hi' ? 'hi_IN' :
-                 SettingsService().locale.value.languageCode == 'de' ? 'de_DE' :
-                 SettingsService().locale.value.languageCode == 'ta' ? 'ta_IN' : 'en_US',
+        partialResults: true,
+        localeId: sttLocale,
         cancelOnError: true,
-        listenMode: ListenMode.confirmation,
+        listenMode: ListenMode.dictation,
       );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isListening = false;
+          _lastResponse = "Mic failed to start: $e";
+        });
+      }
     }
+
+    // Safety check - Stop listening if no words detected after 3 seconds
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && _isListening && !wordsDetected && !_speechToText.isListening) {
+        setState(() {
+          _isListening = false;
+          if (_lastResponse == "Listening...") {
+            _lastResponse = "No sound detected. Please check your mic.";
+          }
+        });
+      }
+    });
   }
 
   Future<void> _sendMessage(String text) async {
     if (text.isEmpty) return;
 
-    setState(() {
-      _lastResponse = ""; // Clear previous response to show we are waiting/receiving
-    });
+    if (mounted) {
+      setState(() {
+        _lastResponse = ""; 
+      });
+    }
 
     try {
       final token = await _storage.read(key: 'jwt_token');
@@ -225,33 +319,24 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
             if (data.isEmpty) return;
             final json = jsonDecode(data);
 
-            if (json['type'] == 'metadata') {
-              final metadata = json['payload'];
-              final avatar = metadata['avatar'];
-              
-              currentEmotion = avatar['facialExpression'] ?? avatar['emotion'] ?? 'neutral';
-              currentAction = avatar['animation'] ?? avatar['gesture'] ?? avatar['action'] ?? 'idle'; // Use gesture as primary action
-              currentSpeed = (avatar['speed'] as num?)?.toDouble() ?? 1.0;
-              currentEyeState = avatar['eye_state'] ?? 'normal';
+              if (json['type'] == 'metadata') {
+                final metadata = json['payload'];
+                final avatar = metadata['avatar'];
+                final safety = metadata['safety'];
+                
+                if (safety != null && safety['detected'] == true) {
+                  _handleSafetyAlert(safety);
+                }
+                
+                currentEmotion = avatar['facialExpression'] ?? avatar['emotion'] ?? 'neutral';
+                currentAction = avatar['animation'] ?? avatar['gesture'] ?? avatar['action'] ?? 'idle';
+                currentSpeed = (avatar['speed'] as num?)?.toDouble() ?? 1.0;
+                currentEyeState = avatar['eye_state'] ?? 'normal';
 
-              if (mounted) {
-                setState(() {
-                  _currentEmotion = currentEmotion;
-                  _currentAction = currentAction;
-                  _currentSpeed = currentSpeed;
-                  _currentEyeState = currentEyeState;
-                });
-              }
-            } else if (json['type'] == 'text') {
-              final content = json['content'] as String;
-              fullResponse += content;
-              if (mounted) {
-                setState(() {
-                  _lastResponse = fullResponse;
-                });
-              }
-            } else if (json.containsKey('content')) {
-              // Backward compatibility
+                if (mounted) {
+                  _onMessageReceived(_lastResponse, currentAction, currentEmotion, currentSpeed, currentEyeState);
+                }
+              } else if (json['type'] == 'text' || json.containsKey('content')) {
               final content = json['content'] as String;
               fullResponse += content;
               if (mounted) {
@@ -266,7 +351,6 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
         }
       }, onDone: () async {
         if (mounted) {
-          // Final update
           _onMessageReceived(fullResponse, currentAction, currentEmotion, currentSpeed, currentEyeState);
           await _ttsService.speak(fullResponse);
         }
@@ -287,25 +371,47 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
   }
 
   void _onMessageReceived(String reply, String action, String emotion, double speed, String eyeState) {
+    _actionTimer?.cancel();
+    
     setState(() {
-      _lastResponse = reply;
+      if (reply.isNotEmpty && reply != _lastResponse) {
+        _lastResponse = reply;
+      }
       _currentAction = action;
       _currentEmotion = emotion;
       _currentSpeed = speed;
       _currentEyeState = eyeState;
     });
 
-    // Reset to idle after 3 seconds
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() {
-          _currentAction = 'idle';
-          _currentEmotion = 'neutral';
-          _currentSpeed = 1.0;
-          _currentEyeState = 'normal';
-        });
-      }
-    });
+    // If it's a special action (not idle or talking), revert after 6 seconds
+    if (action != 'idle' && action != 'talk' && action != 'talking') {
+      _actionTimer = Timer(const Duration(seconds: 6), () {
+        if (mounted) {
+          setState(() {
+            // Revert to talk if still speaking, otherwise idle
+            _currentAction = _isTalking ? 'talk' : 'idle';
+          });
+        }
+      });
+    }
+  }
+
+  void _handleSafetyAlert(Map<String, dynamic> safety) {
+    final risk = safety['riskLevel'];
+    if (risk == 'Medium' || risk == 'High') {
+      setState(() {
+        _showDoctorSuggestion = true;
+        _lastSafetyAlert = safety;
+      });
+    }
+  }
+
+  void _navigateToDoctorBooking() {
+    setState(() => _showDoctorSuggestion = false);
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const FindDoctorsScreen()),
+    );
   }
 
   @override
@@ -334,14 +440,13 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
               // 1. Full-screen Avatar
               Positioned.fill(
                 child: _avatarUrl != null
-                    ? IgnorePointer(
-                        child: AvatarView(
-                          avatarUrl: _avatarUrl!,
-                          action: _currentAction,
-                          emotion: _currentEmotion,
-                          speed: _currentSpeed,
-                          eyeState: _currentEyeState,
-                        ),
+                    ? AvatarView(
+                        avatarUrl: _avatarUrl!,
+                        action: _currentAction,
+                        emotion: _currentEmotion,
+                        speed: _currentSpeed,
+                        eyeState: _currentEyeState,
+                        isTalking: _isTalking,
                       )
                     : Center(
                         child: Column(
@@ -382,6 +487,69 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
                       ),
               ),
 
+              // Doctor Suggestion Overlay
+              if (_showDoctorSuggestion)
+                Positioned(
+                  bottom: 180,
+                  left: 20,
+                  right: 20,
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.grey[900]!.withOpacity(0.9) : Colors.white.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 15,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.info_outline, color: Colors.orange, size: 24),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                l10n.translate('doctor_suggestion_msg'),
+                                style: TextStyle(
+                                  color: isDark ? Colors.white : Colors.black87,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: () => setState(() => _showDoctorSuggestion = false),
+                              child: Text(l10n.translate('no_thanks')),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: _navigateToDoctorBooking,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF8B5CF6),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: Text(l10n.translate('book_now')),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
               // 2. Floating Header Bar
               Positioned(
                 top: 0,
@@ -389,8 +557,8 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
                 right: 0,
                 child: SafeArea(
                   child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                     decoration: BoxDecoration(
                       color: isDark ? Colors.black.withOpacity(0.7) : const Color(0xFFEC4899),
                       borderRadius: BorderRadius.circular(30),
@@ -429,7 +597,7 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
                           ),
                         ),
 
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 4),
 
                         // Chat Mode Selector
                         Flexible(
@@ -460,7 +628,7 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
                             color: isDark ? Colors.grey[900] : Colors.white,
                             elevation: 8,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                               decoration: BoxDecoration(
                                 gradient: const LinearGradient(
                                   colors: [Color(0xFFEC4899), Color(0xFFF472B6)],
@@ -508,65 +676,53 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
                           ),
                         ),
 
-                        const SizedBox(width: 8),
-
+                        const SizedBox(width: 4),
+                        
+                        // Action Buttons Group
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
                             // Debug Button
                             GestureDetector(
                               onTap: _showDebugPanel,
                               child: Container(
-                                margin: const EdgeInsets.only(right: 8),
-                                padding: const EdgeInsets.all(10),
+                                padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
                                   color: isDark ? Colors.grey[900] : Colors.white.withOpacity(0.2),
                                   shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.08),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
                                 ),
                                 child: const Icon(
                                   Icons.bug_report,
                                   color: Colors.white,
-                                  size: 20,
+                                  size: 18,
                                 ),
                               ),
                             ),
-
+                            const SizedBox(width: 4),
                             // Voice Selection Button
                             GestureDetector(
                               onTap: () => Navigator.of(context).push(
                                 MaterialPageRoute(builder: (context) => const VoiceSelectionScreen()),
                               ),
                               child: Container(
-                                margin: const EdgeInsets.only(right: 8),
-                                padding: const EdgeInsets.all(10),
+                                padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
                                   color: isDark ? Colors.grey[900] : Colors.white.withOpacity(0.2),
                                   shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.08),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
                                 ),
                                 child: const Icon(
                                   Icons.record_voice_over,
                                   color: Colors.white,
-                                  size: 20,
+                                  size: 18,
                                 ),
                               ),
                             ),
-                            
+                            const SizedBox(width: 4),
                             // Chat/History Button
                             GestureDetector(
                               onTap: () => setState(() => _isChatOpen = true),
                               child: Container(
-                                padding: const EdgeInsets.all(10),
+                                padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
                                   gradient: const LinearGradient(
                                     colors: [Color(0xFF8B5CF6), Color(0xFF6366F1)],
@@ -574,26 +730,21 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
                                     end: Alignment.bottomRight,
                                   ),
                                   shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFF8B5CF6).withOpacity(0.3),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
                                 ),
                                 child: const Icon(
                                   Icons.forum_outlined,
                                   color: Colors.white,
-                                  size: 20,
+                                  size: 18,
                                 ),
                               ),
                             ),
                           ],
                         ),
-                      ),
+                      ],
                     ),
                   ),
+                ),
+              ),
 
               // 3. AI Response Bubble
               if (_lastResponse.isNotEmpty && !_isChatOpen)
@@ -728,7 +879,11 @@ class _AvatarCompanionHomeScreenState extends State<AvatarCompanionHomeScreen> {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: ['idle', 'talk', 'wave', 'walk'].map((action) => 
+                children: [
+                  'idle', 'wave', 'walk', 'happy', 'angry', 'yell', 'talking', 'sad', 
+                  'angry_point', 'excited', 'happy_walk', 'kneeling', 'laying', 
+                  'rejected', 'sitting_angry', 'sitting_disbelief', 'sleeping', 'dance'
+                ].map((action) => 
                   ActionChip(
                     label: Text(action),
                     backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],

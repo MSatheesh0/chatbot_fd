@@ -39,34 +39,36 @@ class _VoiceSelectionScreenState extends State<VoiceSelectionScreen> with Single
 
   String? _errorMessage;
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool forceRefresh = false}) async {
     final l10n = AppLocalizations.of(context);
+    
+    // If already initialized and we have voices, use them immediately (unless forcing refresh)
+    if (!forceRefresh && _ttsService.isInitialized && _ttsService.voices.isNotEmpty) {
+      setState(() {
+        _voices = _ttsService.voices;
+        _selectedVoiceId = _ttsService.currentVoice?['id'];
+        _isLoading = false;
+        _errorMessage = null;
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
     
     try {
-      debugPrint("VoiceSelectionScreen: Initializing TTS Service...");
-      await _ttsService.init();
+      debugPrint("VoiceSelectionScreen: Initializing TTS Service (forceRefresh: $forceRefresh)...");
+      await _ttsService.init(forceRefresh: forceRefresh);
       final voices = _ttsService.voices;
       debugPrint("VoiceSelectionScreen: Loaded ${voices.length} voices.");
       
       if (voices.isEmpty) {
-        // Try loading again explicitly if empty
-        await _ttsService.init(); 
-        if (_ttsService.voices.isEmpty) {
-             setState(() {
-              _errorMessage = l10n.translate('no_system_voices');
-              _isLoading = false;
-            });
-        } else {
-             setState(() {
-              _voices = _ttsService.voices;
-              _selectedVoiceId = _ttsService.currentVoice?['id'];
-              _isLoading = false;
-            });
-        }
+        setState(() {
+          _errorMessage = l10n.translate('no_system_voices');
+          _isLoading = false;
+        });
       } else {
         setState(() {
           _voices = voices;
@@ -154,7 +156,7 @@ class _VoiceSelectionScreenState extends State<VoiceSelectionScreen> with Single
                           Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
                           const SizedBox(height: 20),
                           ElevatedButton(
-                            onPressed: _loadData,
+                            onPressed: () => _loadData(forceRefresh: true),
                             child: Text(l10n.translate('retry')),
                           ),
                         ],
@@ -211,12 +213,31 @@ class _VoiceSelectionScreenState extends State<VoiceSelectionScreen> with Single
                 color: isSelected ? Colors.white : Colors.grey,
               ),
             ),
-            title: Text(
-              voice['name'] ?? AppLocalizations.of(context).translate('unknown'),
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: isSelected ? (isDark ? Colors.blue[300] : const Color(0xFF6A11CB)) : (isDark ? Colors.white : Colors.black87),
-              ),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    voice['name'] ?? AppLocalizations.of(context).translate('unknown'),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? (isDark ? Colors.blue[300] : const Color(0xFF6A11CB)) : (isDark ? Colors.white : Colors.black87),
+                    ),
+                  ),
+                ),
+                if (voice['quality'] == 'high')
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.green.withOpacity(0.5)),
+                    ),
+                    child: const Text(
+                      'REALISTIC',
+                      style: TextStyle(color: Colors.green, fontSize: 8, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+              ],
             ),
             subtitle: Text(voice['description'] ?? '', style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : Colors.black54)),
             trailing: Row(

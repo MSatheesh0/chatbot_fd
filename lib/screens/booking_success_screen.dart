@@ -38,10 +38,10 @@ class _BookingSuccessScreenState extends State<BookingSuccessScreen> {
   }
 
   Future<void> _scheduleNotifications() async {
+    if (kIsWeb) return; // Notifications not supported on web
     final notificationService = NotificationService();
     await notificationService.init();
     
-    // Generate a unique integer ID from the appointment ID string hash
     final intId = widget.appointmentId.hashCode;
     
     await notificationService.scheduleAppointmentReminders(
@@ -56,10 +56,10 @@ class _BookingSuccessScreenState extends State<BookingSuccessScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? Colors.black : const Color(0xFFCFFAFE),
+      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text('Booking Confirmed'),
-        backgroundColor: isDark ? Colors.black : const Color(0xFF06B6D4),
+        title: const Text('Booking Confirmed', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF009688),
         foregroundColor: Colors.white,
         elevation: 0,
         automaticallyImplyLeading: false,
@@ -76,86 +76,107 @@ class _BookingSuccessScreenState extends State<BookingSuccessScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const Icon(Icons.check_circle, color: Colors.green, size: 80),
             const SizedBox(height: 20),
-            const Text(
-              'Appointment Confirmed!',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Your appointment with ${widget.doctorName} has been successfully booked.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-            const SizedBox(height: 30),
-            
-            // Receipt Card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: isDark ? Colors.grey[900] : Colors.grey[100],
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                color: Colors.green.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check_circle, color: Colors.green, size: 80),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'Appointment Confirmed!',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF2D3142)),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Your appointment with ${widget.doctorName} has been successfully booked.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 15, color: Colors.grey[600], height: 1.5),
+            ),
+            const SizedBox(height: 32),
+            
+            // Receipt Card
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
               ),
               child: Column(
                 children: [
                   _buildRow('Doctor', widget.doctorName),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   _buildRow('Hospital', widget.hospitalName),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   _buildRow('Date', widget.date),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Booking ID', style: TextStyle(color: Colors.grey)),
+                      const Text('Booking ID', style: TextStyle(color: Colors.grey, fontSize: 14)),
                       Flexible(
                         child: Text(
                           widget.appointmentId.substring(0, 8).toUpperCase(),
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2D3142)),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
                   ),
-                  const Divider(height: 30),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Divider(height: 1, thickness: 0.5),
+                  ),
                   
                   // QR Code
                   const Text(
                     'Scan for Entry',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF2D3142)),
                   ),
-                  const SizedBox(height: 15),
+                  const SizedBox(height: 20),
                   Container(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.grey[100]!),
                     ),
                     child: QrImageView(
                       data: widget.qrData,
                       version: QrVersions.auto,
-                      size: 200.0,
+                      size: 180.0,
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       TextButton.icon(
                         onPressed: () => _shareQrCode(context),
-                        icon: const Icon(Icons.share),
+                        icon: const Icon(Icons.share, size: 20),
                         label: const Text('Share'),
+                        style: TextButton.styleFrom(foregroundColor: const Color(0xFF009688)),
                       ),
+                      const SizedBox(width: 24),
                       TextButton.icon(
                         onPressed: () => _downloadQrCode(context),
-                        icon: const Icon(Icons.download),
+                        icon: const Icon(Icons.download, size: 20),
                         label: const Text('Download'),
+                        style: TextButton.styleFrom(foregroundColor: const Color(0xFF009688)),
                       ),
                     ],
                   ),
@@ -163,7 +184,7 @@ class _BookingSuccessScreenState extends State<BookingSuccessScreen> {
               ),
             ),
             
-            const SizedBox(height: 30),
+            const SizedBox(height: 40),
             SizedBox(
               width: double.infinity,
               height: 55,
@@ -175,15 +196,17 @@ class _BookingSuccessScreenState extends State<BookingSuccessScreen> {
                   );
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF06B6D4),
+                  backgroundColor: const Color(0xFF009688),
                   foregroundColor: Colors.white,
+                  elevation: 0,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-                child: const Text('Go to Home', style: TextStyle(fontSize: 18)),
+                child: const Text('Go to Home', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               ),
             ),
+            const SizedBox(height: 20),
           ],
         ),
       ),

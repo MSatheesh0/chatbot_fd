@@ -45,6 +45,7 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
     'dailyTimeline': [],
     'mentalHealthScore': 75
   };
+  List<dynamic> _safetyAlerts = [];
 
   @override
   void initState() {
@@ -67,9 +68,18 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
         headers: {'x-auth-token': token ?? ''},
       );
 
+      // Fetch Safety Alerts
+      final safetyResponse = await http.get(
+        Uri.parse(ApiConstants.safetyAlertsUrl),
+        headers: {'x-auth-token': token ?? ''},
+      );
+
       if (response.statusCode == 200) {
         setState(() {
           _data = jsonDecode(response.body);
+          if (safetyResponse.statusCode == 200) {
+            _safetyAlerts = jsonDecode(safetyResponse.body);
+          }
           _isLoading = false;
         });
       } else {
@@ -126,6 +136,8 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
                             _buildDailyTimelineCard(l10n, isDark),
                             const SizedBox(height: 20),
                             _buildScoreCard(l10n, isDark),
+                            const SizedBox(height: 20),
+                            _buildSafetyAlertsCard(l10n, isDark),
                             const SizedBox(height: 20),
                           ],
                         ),
@@ -578,6 +590,88 @@ class _AnalysisDashboardScreenState extends State<AnalysisDashboardScreen> {
         const SizedBox(width: 5),
         Text(label, style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
       ],
+    );
+  }
+
+  Widget _buildSafetyAlertsCard(AppLocalizations l10n, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: _cardDecoration(isDark),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.red),
+              const SizedBox(width: 10),
+              Text(
+                l10n.translate('sensitive_alert'),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : const Color(0xFF2D3436)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          if (_safetyAlerts.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Center(child: Text(l10n.translate('no_notifications'), style: const TextStyle(color: Colors.grey))),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _safetyAlerts.length,
+              separatorBuilder: (context, index) => const Divider(),
+              itemBuilder: (context, index) {
+                final alert = _safetyAlerts[index];
+                final date = DateTime.parse(alert['timestamp']);
+                final timeStr = DateFormat('MMM dd, HH:mm').format(date);
+                
+                Color riskColor = Colors.grey;
+                if (alert['riskLevel'] == 'High') riskColor = Colors.red;
+                else if (alert['riskLevel'] == 'Medium') riskColor = Colors.orange;
+                else riskColor = Colors.blue;
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: riskColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: riskColor),
+                            ),
+                            child: Text(
+                              alert['riskLevel'] ?? 'Low',
+                              style: TextStyle(color: riskColor, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          Text(timeStr, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        alert['message'] ?? '',
+                        style: TextStyle(color: isDark ? Colors.white70 : Colors.black87, fontSize: 13),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${l10n.translate('category')}: ${alert['category']}',
+                        style: const TextStyle(color: Colors.grey, fontSize: 11, fontStyle: FontStyle.italic),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
     );
   }
 

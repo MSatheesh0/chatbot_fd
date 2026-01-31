@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -7,6 +8,7 @@ import 'services/reminder_service.dart';
 import 'services/notification_service.dart';
 import 'services/background_service.dart';
 import 'services/settings_service.dart';
+import 'services/tts_service.dart';
 import 'screens/reminder_overlay_screen.dart';
 import 'screens/reminder_overlay_widget.dart';
 import 'screens/splash_screen.dart';
@@ -35,9 +37,18 @@ Future<void> main() async {
   Stripe.publishableKey = dotenv.env['STRIPE_PUBLISHABLE_KEY'] ?? '';
 
   await ReminderService().init();
-  await NotificationService().init();
-  await initializeBackgroundService(); // Start background service
+  
+  if (!kIsWeb) {
+    await NotificationService().init();
+  }
+  
+  // Background service is only supported on mobile
+  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS)) {
+    await initializeBackgroundService();
+  }
+  
   await SettingsService().init(); // Init settings
+  await TTSService().init(); // Pre-load TTS voices for speed
   runApp(const MyApp());
 }
 
@@ -49,15 +60,16 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  final Set<int> _activeReminderIds = {};
-
   @override
   void initState() {
     super.initState();
+    // Check permissions on startup
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!kIsWeb) {
+        ReminderService().requestPermissions();
+      }
+    });
   }
-
-  // ... existing methods ...
-
 
   @override
   Widget build(BuildContext context) {

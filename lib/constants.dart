@@ -1,14 +1,13 @@
 import 'package:flutter/foundation.dart';
-import 'dart:io';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiConstants {
   static String get baseUrl {
     String? envUrl = dotenv.env['API_BASE_URL'];
-    if (envUrl != null && envUrl.isNotEmpty) {
-      return envUrl;
+    if (envUrl == null || envUrl.isEmpty) {
+      throw Exception('API_BASE_URL not found in .env file');
     }
-    return 'https://chatbot-bc.onrender.com';
+    return envUrl;
   }
 
   static String get loginUrl => '$baseUrl/auth/login';
@@ -24,6 +23,7 @@ class ApiConstants {
   static String get nearbyDoctorsUrl => '$baseUrl/doctors/nearby';
   static String get remindersUrl => '$baseUrl/reminders';
   static String get analysisUrl => '$baseUrl/analysis/emotions';
+  static String get safetyAlertsUrl => '$baseUrl/analysis/safety-alerts';
   static String get voiceSettingsUrl => '$baseUrl/voice/settings';
   static String get voiceListUrl => '$baseUrl/voice/list';
   static String get voiceSpeakUrl => '$baseUrl/voice/speak';

@@ -6,6 +6,7 @@ class AvatarView extends StatelessWidget {
   final String emotion;
   final double speed;
   final String eyeState;
+  final bool isTalking;
 
   const AvatarView({
     super.key,
@@ -14,6 +15,7 @@ class AvatarView extends StatelessWidget {
     this.emotion = 'neutral',
     this.speed = 1.0,
     this.eyeState = 'normal',
+    this.isTalking = false,
   });
 
   @override

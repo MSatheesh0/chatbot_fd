@@ -135,7 +135,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> with SingleTickerProvid
     return Scaffold(
       backgroundColor: isDark ? Theme.of(context).scaffoldBackgroundColor : const Color(0xFFF3E5F5),
       appBar: AppBar(
-        title: Text(l10n.translate('mental_health_analysis'), style: TextStyle(color: isDark ? Colors.white : Colors.white)),
+        title: Text(
+          _selectedModel == 'Mental Health' 
+              ? l10n.translate('mental_health_analysis') 
+              : '${l10n.translate(_selectedModel.toLowerCase().replaceAll(' ', '_'))} ${l10n.translate('analysis')}',
+          style: TextStyle(color: isDark ? Colors.white : Colors.white)
+        ),
         backgroundColor: isDark ? Colors.grey[900] : const Color(0xFF9C27B0),
         elevation: 0,
         iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.white),

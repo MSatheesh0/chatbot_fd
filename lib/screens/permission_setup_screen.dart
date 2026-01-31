@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:iconsax/iconsax.dart';
@@ -71,7 +72,7 @@ class _PermissionSetupScreenState extends State<PermissionSetupScreen> {
   }
 
   Future<void> _checkCurrentPermission() async {
-    if (_currentStep >= _getSteps(context).length) {
+    if (kIsWeb || _currentStep >= _getSteps(context).length) {
       _finishSetup();
       return;
     }

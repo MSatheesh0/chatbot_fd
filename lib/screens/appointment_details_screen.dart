@@ -20,11 +20,12 @@ class AppointmentDetailsScreen extends StatelessWidget {
     final qrData = appointment['qrCodeData'];
 
     return Scaffold(
-      backgroundColor: isDark ? Theme.of(context).scaffoldBackgroundColor : const Color(0xFFE0F2F1),
+      backgroundColor: isDark ? const Color(0xFF121212) : const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: const Text('Appointment Details'),
-        backgroundColor: isDark ? Colors.black : const Color(0xFF009688),
+        title: const Text('Appointment Details', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF009688),
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -34,11 +35,11 @@ class AppointmentDetailsScreen extends StatelessWidget {
             // Status Banner
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(15),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: _getStatusColor(appointment['status']).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _getStatusColor(appointment['status'])),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: _getStatusColor(appointment['status']).withOpacity(0.3)),
               ),
               child: Row(
                 children: [
@@ -46,7 +47,7 @@ class AppointmentDetailsScreen extends StatelessWidget {
                     _getStatusIcon(appointment['status']),
                     color: _getStatusColor(appointment['status']),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   Text(
                     'Status: ${appointment['status'].toString().toUpperCase()}',
                     style: TextStyle(
@@ -58,97 +59,65 @@ class AppointmentDetailsScreen extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
 
             // Doctor Details
-            const Text(
-              'Doctor Details',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-              child: Padding(
-                padding: const EdgeInsets.all(15),
-                child: Column(
-                  children: [
-                    _buildRow('Doctor Name', appointment['doctorName']),
-                    const Divider(),
-                    _buildRow('Hospital', appointment['hospitalName']),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
+            _buildSectionTitle('Doctor Details', isDark),
+            const SizedBox(height: 12),
+            _buildInfoCard([
+              _buildRow('Doctor Name', appointment['doctorName']),
+              const Divider(height: 1),
+              _buildRow('Hospital', appointment['hospitalName']),
+            ], isDark),
+            const SizedBox(height: 24),
 
             // Appointment Info
-            const Text(
-              'Appointment Info',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-              child: Padding(
-                padding: const EdgeInsets.all(15),
-                child: Column(
-                  children: [
-                    _buildRow('Date', DateFormat('MMM d, yyyy').format(date)),
-                    const Divider(),
-                    _buildRow('Time', DateFormat('h:mm a').format(date)),
-                    const Divider(),
-                    _buildRow('Booking ID', appointment['_id'].toString().substring(0, 8).toUpperCase()),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
+            _buildSectionTitle('Appointment Info', isDark),
+            const SizedBox(height: 12),
+            _buildInfoCard([
+              _buildRow('Date', DateFormat('MMM d, yyyy').format(date)),
+              const Divider(height: 1),
+              _buildRow('Time', DateFormat('h:mm a').format(date)),
+              const Divider(height: 1),
+              _buildRow('Booking ID', appointment['_id'].toString().substring(0, 8).toUpperCase()),
+            ], isDark),
+            const SizedBox(height: 24),
 
             // Payment Info
-            const Text(
-              'Payment Info',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-              child: Padding(
-                padding: const EdgeInsets.all(15),
-                child: Column(
-                  children: [
-                    _buildRow('Amount Paid', '₹${appointment['amount']}'),
-                    const Divider(),
-                    _buildRow('Payment ID', appointment['paymentId'] ?? 'N/A'),
-                    const Divider(),
-                    _buildRow('Payment Method', 'Online (Stripe/UPI)'),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 30),
+            _buildSectionTitle('Payment Info', isDark),
+            const SizedBox(height: 12),
+            _buildInfoCard([
+              _buildRow('Amount Paid', '₹${appointment['amount']}'),
+              const Divider(height: 1),
+              _buildRow('Payment ID', appointment['paymentId'] ?? 'N/A'),
+              const Divider(height: 1),
+              _buildRow('Payment Method', 'Online (Stripe/UPI)'),
+            ], isDark),
+            const SizedBox(height: 32),
 
             // QR Code Section
             Center(
               child: Column(
                 children: [
-                  const Text(
+                  Text(
                     'Scan for Entry',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: 16, 
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : const Color(0xFF2D3142),
+                    ),
                   ),
-                  const SizedBox(height: 15),
+                  const SizedBox(height: 16),
                   Container(
-                    padding: const EdgeInsets.all(15),
+                    padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(15),
+                      borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.grey.withOpacity(0.2),
-                          blurRadius: 10,
-                          spreadRadius: 2,
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 15,
+                          offset: const Offset(0, 5),
                         ),
                       ],
                     ),
@@ -158,7 +127,7 @@ class AppointmentDetailsScreen extends StatelessWidget {
                       size: 200.0,
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -169,22 +138,62 @@ class AppointmentDetailsScreen extends StatelessWidget {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF009688),
                           foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
                         ),
                       ),
-                      const SizedBox(width: 20),
+                      const SizedBox(width: 16),
                       OutlinedButton.icon(
                         onPressed: () => _shareQrCode(context, qrData),
                         icon: const Icon(Icons.share),
                         label: const Text('Share'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF009688),
+                          side: const BorderSide(color: Color(0xFF009688)),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
                       ),
                     ],
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 40),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title, bool isDark) {
+    return Text(
+      title,
+      style: TextStyle(
+        fontSize: 18, 
+        fontWeight: FontWeight.bold,
+        color: isDark ? Colors.white : const Color(0xFF2D3142),
+      ),
+    );
+  }
+
+  Widget _buildInfoCard(List<Widget> children, bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(children: children),
       ),
     );
   }
